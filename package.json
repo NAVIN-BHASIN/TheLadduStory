@@ -1,0 +1,15 @@
+{
+  "name": "the-laddu-story-oms",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "server",
+    "admin-desktop"
+  ],
+  "scripts": {
+    "setup:sheets": "node scripts/google-sheets-setup.js",
+    "seed:data": "node scripts/seed-data.js",
+    "server:dev": "npm --prefix server run dev",
+    "desktop:dev": "npm --prefix admin-desktop run dev"
+  }
+}

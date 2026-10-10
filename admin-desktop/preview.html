@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Laddu Story - Official E-Commerce Store & OMS Terminal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,700;1,600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <style>
+    :root {
+      --primary: #3f111a;
+      --primary-dark: #2a0b12;
+      --gold: #b45309;
+      --gold-light: #fef3c7;
+      --green: #059669;
+      --green-light: #ecfdf5;
+      --bg: #faf6f0;
+      --card-bg: #ffffff;
+      --border: #ebd9c8;
+      --text: #2d1810;
+      --muted: #6b7280;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+    body { background-color: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
+    
+    /* Top ribbon */
+    .top-bar { background: var(--primary-dark); color: #fef3c7; padding: 6px 24px; font-size: 0.82rem; display: flex; justify-content: space-between; align-items: center; }
+    
+    /* Header */
+    header { background: #fff; border-bottom: 2px solid var(--border); padding: 14px 28px; box-shadow: 0 4px 12px rgba(74,18,30,0.04); }
+    .header-inner { max-width: 1440px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; }
+    .brand-logo { width: 54px; height: 54px; border-radius: 50%; background: #7c3f1d; border: 3px solid var(--gold); display: flex; align-items: center; justify-content: center; font-size: 1.6rem; }
+    .brand-title { font-family: 'Playfair Display', Georgia, serif; font-size: 1.8rem; font-weight: 800; color: var(--primary); }
+    
+    /* Nav switch */
+    .nav-switch { display: flex; gap: 6px; background: #f5ebe0; padding: 4px; border-radius: 10px; }
+    .nav-btn { padding: 8px 16px; border-radius: 8px; border: none; font-weight: 700; font-size: 0.85rem; cursor: pointer; background: transparent; color: #6b4030; transition: all 0.2s; }
+    .nav-btn.active { background: var(--primary); color: #fff; }
+
+    /* Trust ribbon */
+    .trust-bar { background: #fdf8f2; border-bottom: 1px solid var(--border); padding: 10px 24px; }
+    .trust-inner { max-width: 1440px; margin: 0 auto; display: flex; justify-content: space-around; flex-wrap: wrap; gap: 12px; font-size: 0.82rem; font-weight: 700; color: #6b3f20; }
+
+    /* Main */
+    main { max-width: 1440px; margin: 0 auto; padding: 24px; width: 100%; flex: 1; }
+    .layout-grid { display: grid; grid-template-columns: 1.55fr 1fr; gap: 28px; }
+
+    /* Product Cards */
+    .catalog-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+    .prod-card { background: #fff; border: 1px solid #e8ded4; border-radius: 14px; padding: 16px; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 2px 8px rgba(74,18,30,0.03); border-top: 4px solid var(--gold); }
+    .prod-card.savory { border-top-color: var(--green); }
+    .card-tag { font-size: 0.75rem; font-weight: 800; color: var(--gold); background: var(--gold-light); padding: 2px 8px; border-radius: 4px; }
+    .card-title { font-size: 1.05rem; font-weight: 800; color: var(--primary); margin: 6px 0 2px; }
+    .card-price { font-size: 1.3rem; font-weight: 800; color: var(--primary); }
+    
+    /* Cart */
+    .cart-box { background: #fff; border-radius: 16px; border: 1px solid #e8ded4; padding: 22px; height: fit-content; box-shadow: 0 4px 16px rgba(74,18,30,0.05); }
+    .cart-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px dashed var(--border); }
+    .qty-btn { width: 26px; height: 26px; border-radius: 6px; border: 1px solid #d1d5db; background: #f9fafb; cursor: pointer; font-weight: 700; }
+    
+    /* Modal */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 9999; }
+    .modal-card { background: #fff; padding: 28px; border-radius: 20px; text-align: center; width: 380px; box-shadow: 0 20px 40px rgba(0,0,0,0.3); }
+  </style>
+</head>
+<body>
+
+  <div class="top-bar">
+    <div>✨ <b>Official Menu & Pricing</b> | Sweetener: Pure Cow Ghee & Unrefined Jaggery | <b>Zero Added Sugar, Zero Preservatives</b></div>
+    <div>📞 Hotline: <b>9343207515</b> &nbsp;|&nbsp; 📧 <b>theladdustory@gmail.com</b></div>
+  </div>
+
+  <header>
+    <div class="header-inner">
+      <div style="display: flex; align-items: center; gap: 14px;">
+        <div class="brand-logo">🥣</div>
+        <div>
+          <div style="display: flex; align-items: baseline; gap: 8px;">
+            <div class="brand-title">The Laddu Story</div>
+            <span style="font-size: 0.75rem; background: var(--green-light); color: var(--green); padding: 2px 8px; border-radius: 4px; font-weight: 700;">Ancient Superfoods</span>
+          </div>
+          <p style="margin: 2px 0 0; font-size: 0.85rem; color: #7c3f1d; font-weight: 600;">
+            Homemade healthy snacks: Ancient Indian traditions and superfoods
+          </p>
+        </div>
+      </div>
+
+      <div style="background: var(--gold-light); border: 1px solid #fde68a; padding: 6px 14px; borderRadius: 8px; textAlign: center;">
+        <div style="color: #92400e; font-weight: 800; font-size: 0.88rem;">Say No to Junk , Say Yes to The Laddu Story!</div>
+        <div style="font-size: 0.75rem; color: #b45309; font-weight: 600;">Minimum order quantity - 500gms for Laddus</div>
+      </div>
+
+      <div class="nav-switch">
+        <button class="nav-btn active" id="btn-store" onclick="switchView('store')">🛍️ Customer Store</button>
+        <button class="nav-btn" id="btn-pos" onclick="switchView('pos')">🛒 Counter POS</button>
+        <button class="nav-btn" id="btn-sheets" onclick="switchView('sheets')">📊 Google Sheets OMS</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="trust-bar">
+    <div class="trust-inner">
+      <span>🌱 100% Pure Cow Ghee</span>
+      <span>🍯 Unrefined Jaggery Powder</span>
+      <span>🚫 No White Sugar</span>
+      <span>🌿 Zero Preservatives</span>
+      <span>📦 Airtight Fresh Packaging</span>
+      <span>📱 Contact: 9343207515</span>
+    </div>
+  </div>
+
+  <main>
+    <!-- VIEW 1: CUSTOMER E-COMMERCE -->
+    <div id="view-store" class="layout-grid">
+      <div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <div>
+            <h2 style="font-size: 1.35rem; font-weight: 800; color: var(--primary);">Official 11 Items Catalog</h2>
+            <p style="font-size: 0.85rem; color: #7c3f1d;">Handcrafted in batches using ancient grains & desi ghee.</p>
+          </div>
+          <span style="background: var(--green-light); color: var(--green); padding: 5px 12px; border-radius: 6px; font-size: 0.8rem; font-weight: 700;">
+            MOQ: 500g for Laddus
+          </span>
+        </div>
+        <div class="catalog-grid" id="catalogGrid"></div>
+      </div>
+
+      <!-- CART -->
+      <div class="cart-box">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--bg); padding-bottom: 10px;">
+          <h3 style="font-size: 1.2rem; color: var(--primary); font-weight: 800;">
+            🛍️ Order Cart (<span id="cartCount">0</span>)
+          </h3>
+          <button onclick="clearCart()" style="border: none; background: none; color: #dc2626; font-size: 0.78rem; font-weight: 700; cursor: pointer;">Clear</button>
+        </div>
+
+        <div id="cartItemsList" style="max-height: 280px; overflow-y: auto; margin: 14px 0;">
+          <div style="text-align: center; color: var(--muted); padding: 40px 10px;">Your cart is currently empty.</div>
+        </div>
+
+        <div style="border-top: 2px solid var(--bg); padding-top: 14px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px;">
+            <input type="text" id="custName" placeholder="Customer Name" style="padding: 10px; border-radius: 8px; border: 1px solid #d1d5db; font-size: 0.85rem;" />
+            <input type="tel" id="custPhone" placeholder="Mobile (+91...)" style="padding: 10px; border-radius: 8px; border: 1px solid #d1d5db; font-size: 0.85rem;" />
+          </div>
+          <textarea id="custAddress" placeholder="Delivery Address & Landmark" rows="2" style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 8px; border: 1px solid #d1d5db; font-size: 0.85rem; margin-bottom: 12px;"></textarea>
+
+          <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 14px;">
+            <span style="font-size: 1rem; font-weight: 600; color: var(--muted);">Total Amount:</span>
+            <span style="font-size: 1.8rem; font-weight: 800; color: var(--primary);">₹<span id="cartTotalDisplay">0</span></span>
+          </div>
+
+          <button onclick="handleCheckout('MOBILE_APP')" id="btnCheckout" disabled style="width: 100%; padding: 14px; border-radius: 10px; background: #9ca3af; color: white; border: none; font-weight: 800; font-size: 1rem; cursor: not-allowed; margin-bottom: 10px;">
+            ⚡ Generate Dynamic UPI QR & Pay
+          </button>
+
+          <button onclick="sendViaWhatsApp()" style="width: 100%; padding: 12px; border-radius: 10px; background: var(--green); color: white; border: none; font-weight: 700; font-size: 0.9rem; cursor: pointer;">
+            💬 Order via WhatsApp (9343207515)
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 2: COUNTER POS -->
+    <div id="view-pos" style="display: none; background: white; border-radius: 16px; border: 1px solid var(--border); padding: 24px;">
+      <h2 style="color: var(--primary); margin-bottom: 4px;">🏪 Store Counter POS Register</h2>
+      <p style="color: #7c3f1d; font-size: 0.85rem; margin-bottom: 16px;">Direct billing for walk-in counter visitors with instant stock deduction.</p>
+      <div id="posGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px;"></div>
+    </div>
+
+    <!-- VIEW 3: GOOGLE SHEETS LIVE OMS (theladdustory@gmail.com) -->
+    <div id="view-sheets" style="display: none; background: white; border-radius: 16px; border: 1px solid var(--border); padding: 24px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--bg); padding-bottom: 12px; margin-bottom: 18px;">
+        <div>
+          <h2 style="color: var(--primary); margin: 0;">📊 Google Sheets Master OMS</h2>
+          <div style="color: var(--green); font-weight: 600; font-size: 0.85rem; margin-top: 4px;">
+            Target Account: <b>theladdustory@gmail.com</b> | Real-time Dynamic Formulas (=SUMIF) Active
+          </div>
+        </div>
+        <span style="background: var(--green-light); color: var(--green); padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 700;">
+          ● Sync Active
+        </span>
+      </div>
+
+      <h3 style="color: var(--primary); font-size: 1.05rem; margin-bottom: 10px;">Sheet 2: Inventory & Formula Alerts</h3>
+      <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-bottom: 24px;">
+        <thead>
+          <tr style="background: var(--primary); color: #fef3c7; text-align: left;">
+            <th style="padding: 10px;">#</th>
+            <th style="padding: 10px;">Item Name</th>
+            <th style="padding: 10px;">Official Price</th>
+            <th style="padding: 10px;">Opening Stock</th>
+            <th style="padding: 10px;">Sold (=SUMIF)</th>
+            <th style="padding: 10px;">Current Stock</th>
+            <th style="padding: 10px;">Reorder Alert</th>
+          </tr>
+        </thead>
+        <tbody id="sheetsInventoryTable"></tbody>
+      </table>
+
+      <h3 style="color: var(--primary); font-size: 1.05rem; margin-bottom: 10px;">Sheet 1: Orders (Live Stream)</h3>
+      <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+        <thead>
+          <tr style="background: #f9fafb; text-align: left; border-bottom: 2px solid #e5e7eb;">
+            <th style="padding: 10px;">OrderID</th>
+            <th style="padding: 10px;">Channel</th>
+            <th style="padding: 10px;">Customer</th>
+            <th style="padding: 10px;">Item</th>
+            <th style="padding: 10px;">Qty</th>
+            <th style="padding: 10px;">Total</th>
+            <th style="padding: 10px;">Status</th>
+          </tr>
+        </thead>
+        <tbody id="sheetsOrdersTable"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <!-- MODAL -->
+  <div class="modal-overlay" id="qrModal">
+    <div class="modal-card">
+      <div style="background: var(--gold-light); color: #92400e; display: inline-block; padding: 4px 12px; border-radius: 20px; font-weight: 800; font-size: 0.8rem; margin-bottom: 12px;">
+        THE LADDU STORY - DYNAMIC UPI
+      </div>
+      <h3 style="color: var(--primary); margin-bottom: 4px;">Scan & Pay ₹<span id="modalAmount">0</span></h3>
+      <p style="color: var(--muted); font-size: 0.82rem; margin-bottom: 16px;">VPA: <b>theladdu@bank</b> (GPay, PhonePe, Paytm, BHIM)</p>
+      
+      <div style="margin: 0 auto 16px; width: 220px; height: 220px; padding: 10px; border-radius: 12px; border: 2px dashed var(--gold);">
+        <canvas id="qrCanvas"></canvas>
+      </div>
+
+      <div style="font-size: 0.82rem; background: var(--bg); padding: 8px; border-radius: 8px; color: #7c3f1d; margin-bottom: 16px; font-weight: 600;">
+        Order ID: <b id="modalOrderId">TLS-XXXX</b>
+      </div>
+
+      <div style="display: flex; gap: 10px;">
+        <button onclick="confirmOrderPayment()" style="flex: 1; padding: 12px; background: var(--green); color: white; border: none; border-radius: 8px; font-weight: 800; cursor: pointer;">
+          ✅ Payment Verified
+        </button>
+        <button onclick="closeQRModal()" style="padding: 12px 18px; background: #e5e7eb; color: var(--text); border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const PRODUCTS = [
+      { id: '01', sku: 'RAGI-WALNUT', name: 'Ragi Walnut Laddu', category: 'LADDU', ratePerKg: 1200, p500: 600, p1k: 1200, tag: 'Superfood Millet', desc: 'Finger Millet, Walnuts, Cow Ghee, Jaggery' },
+      { id: '02', sku: 'TILL-BLACK-SESAME', name: 'Till Laddu (Black Sesame)', category: 'LADDU', ratePerKg: 1000, p500: 500, p1k: 1000, tag: 'Ayurvedic Warmth', desc: 'Black Sesame, Desi Cow Ghee, Jaggery' },
+      { id: '03', sku: 'SATTU-ALMOND', name: 'Sattu Almond Laddu', category: 'LADDU', ratePerKg: 1100, p500: 550, p1k: 1100, tag: 'High Protein', desc: 'Roasted Chana Sattu, Almonds, Ghee, Jaggery' },
+      { id: '04', sku: 'GROUNDNUT', name: 'Groundnut Laddu', category: 'LADDU', ratePerKg: 800, p500: 400, p1k: 800, tag: 'Traditional Classic', desc: 'Roasted Peanuts, Cow Ghee, Organic Jaggery' },
+      { id: '05', sku: 'QUINOA-MOONG-DAL', name: 'Quinoa Moong Dal Laddu', category: 'LADDU', ratePerKg: 1250, p500: 625, p1k: 1250, tag: 'Ancient Superfood', desc: 'Organic Quinoa, Moong Dal, Ghee, Jaggery' },
+      { id: '06', sku: 'METHI-FENUGREEK', name: 'Methi (fenugreek) Laddu', category: 'LADDU', ratePerKg: 1250, p500: 625, p1k: 1250, tag: 'Joint Health', desc: 'Fenugreek, Gond, Dry Fruits, Ghee, Jaggery' },
+      { id: '07', sku: 'DATES-DRY-FRUITS', name: 'Dates & Dry Fruits Bites', category: 'LADDU', ratePerKg: 1900, p500: 950, p1k: 1900, tag: 'Zero Added Sweetener', desc: 'Pure Medjool Dates & Assorted Premium Nuts' },
+      { id: '08', sku: 'POST-DELIVERY-PANJEERI', name: 'Post Delivery Panjeeri / Laddu', category: 'LADDU', ratePerKg: 1800, p500: 900, p1k: 1800, tag: 'Postpartum Care', desc: 'Kamarkas, Gond, Ayurvedic Herbs, Ghee, Jaggery' },
+      { id: '09', sku: 'JAWAR-PANJEERI', name: 'Jawar Panjeeri / Laddu', category: 'LADDU', ratePerKg: 1900, p500: 950, p1k: 1900, tag: 'Gluten-Free Millet', desc: 'Sorghum Jawar, Dry Fruits, Gond, Cow Ghee' },
+      { id: '10', sku: 'SAVORY-MAKHANA', name: 'Savory Munchies (Makhana)', subname: 'Roasted Makhana (₹275/100g)', category: 'SAVORY', ratePerKg: 2750, p500: 275, p1k: 550, tag: 'Guilt-Free Crunch', desc: 'Fox Nuts roasted in pure cow ghee & rock salt' },
+      { id: '11', sku: 'SAVORY-MURMURA', name: 'Savory Munchies (Murmura)', subname: 'Millet Mudi Mix (₹200/200g)', category: 'SAVORY', ratePerKg: 1000, p500: 200, p1k: 400, tag: 'Tea-Time Crunch', desc: 'Puffed Millets, Roasted Peanuts & curry leaves' }
+    ];
+
+    let cart = [];
+    let selectedWeights = {};
+    let activeOrder = null;
+
+    let sheetsOrders = [
+      { orderId: 'TLS-20261009-0891', channel: 'WHATSAPP', name: 'Dr. Ananya Sharma', sku: 'RAGI-WALNUT', item: 'Ragi Walnut Laddu (1 Kg)', qty: 1, total: 1200, status: 'DELIVERED' },
+      { orderId: 'TLS-20261009-0892', channel: 'MOBILE_APP', name: 'Vikas Sundaram', sku: 'POST-DELIVERY-PANJEERI', item: 'Post Delivery Panjeeri (500g)', qty: 2, total: 1800, status: 'PACKED' },
+      { orderId: 'TLS-20261009-0893', channel: 'WALK_IN', name: 'Kavita Menon', sku: 'SAVORY-MAKHANA', item: 'Roasted Makhana (100g)', qty: 2, total: 550, status: 'DELIVERED' }
+    ];
+
+    function renderCatalog() {
+      const grid = document.getElementById('catalogGrid');
+      grid.innerHTML = PRODUCTS.map(p => {
+        const isSavory = p.category === 'SAVORY';
+        const choice = selectedWeights[p.sku] || (isSavory ? 'P1' : '500G');
+        const price = isSavory ? (choice === 'P1' ? p.p500 : p.p1k) : (choice === '500G' ? p.p500 : p.p1k);
+
+        return `
+          <div class="prod-card ${isSavory ? 'savory' : ''}">
+            <div>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span class="card-tag">#${p.id} ${p.tag}</span>
+                <span style="font-size: 0.75rem; color: var(--muted); font-weight: 600;">${isSavory ? 'Savory' : '₹' + p.ratePerKg + '/Kg'}</span>
+              </div>
+              <div class="card-title">${p.name}</div>
+              ${p.subname ? `<div style="font-size: 0.8rem; color: var(--green); font-weight: 700; margin-bottom: 4px;">${p.subname}</div>` : ''}
+              <div style="font-size: 0.75rem; color: #7c3f1d; background: #faf6f0; padding: 6px; border-radius: 6px; margin: 8px 0;">
+                <b>Made with:</b> ${p.desc}
+              </div>
+            </div>
+
+            <div style="border-top: 1px dashed var(--border); padding-top: 10px; margin-top: 10px;">
+              <div style="display: flex; gap: 6px; margin-bottom: 10px;">
+                ${isSavory ? `
+                  <button onclick="setWeight('${p.sku}', 'P1')" style="flex:1; padding: 4px; font-size: 0.72rem; font-weight: 700; border-radius: 4px; border: ${choice === 'P1' ? '2px solid var(--green)' : '1px solid #d1d5db'}; background: ${choice === 'P1' ? 'var(--green-light)' : '#fff'}; color: ${choice === 'P1' ? 'var(--green)' : '#4b5563'}; cursor:pointer;">${p.id === '10' ? '100g Pack' : '200g Pack'}</button>
+                  <button onclick="setWeight('${p.sku}', 'P2')" style="flex:1; padding: 4px; font-size: 0.72rem; font-weight: 700; border-radius: 4px; border: ${choice === 'P2' ? '2px solid var(--green)' : '1px solid #d1d5db'}; background: ${choice === 'P2' ? 'var(--green-light)' : '#fff'}; color: ${choice === 'P2' ? 'var(--green)' : '#4b5563'}; cursor:pointer;">${p.id === '10' ? '200g (2x)' : '400g (2x)'}</button>
+                ` : `
+                  <button onclick="setWeight('${p.sku}', '500G')" style="flex:1; padding: 4px; font-size: 0.72rem; font-weight: 700; border-radius: 4px; border: ${choice === '500G' ? '2px solid var(--gold)' : '1px solid #d1d5db'}; background: ${choice === '500G' ? 'var(--gold-light)' : '#fff'}; color: ${choice === '500G' ? '#92400e' : '#4b5563'}; cursor:pointer;">500g (Min MOQ)</button>
+                  <button onclick="setWeight('${p.sku}', '1KG')" style="flex:1; padding: 4px; font-size: 0.72rem; font-weight: 700; border-radius: 4px; border: ${choice === '1KG' ? '2px solid var(--gold)' : '1px solid #d1d5db'}; background: ${choice === '1KG' ? 'var(--gold-light)' : '#fff'}; color: ${choice === '1KG' ? '#92400e' : '#4b5563'}; cursor:pointer;">1 Kg Pack</button>
+                `}
+              </div>
+
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span class="card-price">₹${price}</span>
+                <button onclick="addToCart('${p.sku}')" style="background: var(--primary); color: white; border: none; padding: 6px 14px; border-radius: 6px; font-weight: 700; font-size: 0.85rem; cursor: pointer;">+ Add</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      renderPOS();
+    }
+
+    function renderPOS() {
+      const posGrid = document.getElementById('posGrid');
+      posGrid.innerHTML = PRODUCTS.map(p => `
+        <div onclick="addToCart('${p.sku}')" style="background: #faf6f0; border: 1px solid var(--border); border-radius: 10px; padding: 12px; cursor: pointer;">
+          <div style="font-size: 0.72rem; font-weight: 700; color: var(--gold);">#${p.id} ${p.category}</div>
+          <div style="font-weight: 700; font-size: 0.9rem; margin: 4px 0;">${p.name}</div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
+            <b style="color: var(--primary);">₹${p.p500}</b>
+            <span style="background: var(--primary); color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">+ Bill</span>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function setWeight(sku, w) {
+      selectedWeights[sku] = w;
+      renderCatalog();
+    }
+
+    function addToCart(sku) {
+      const prod = PRODUCTS.find(p => p.sku === sku);
+      const isSavory = prod.category === 'SAVORY';
+      const choice = selectedWeights[sku] || (isSavory ? 'P1' : '500G');
+      const packLabel = isSavory 
+        ? (choice === 'P1' ? (prod.id === '10' ? '100g' : '200g') : (prod.id === '10' ? '200g' : '400g'))
+        : (choice === '500G' ? '500g' : '1kg');
+      const unitPrice = isSavory ? (choice === 'P1' ? prod.p500 : prod.p1k) : (choice === '500G' ? prod.p500 : prod.p1k);
+
+      const cartKey = `${sku}-${packLabel}`;
+      const existing = cart.find(i => i.cartKey === cartKey);
+      if (existing) {
+        existing.qty += 1;
+      } else {
+        cart.push({ cartKey, sku, name: prod.name, packLabel, unitPrice, qty: 1 });
+      }
+      updateCartUI();
+    }
+
+    function updateCartQty(cartKey, delta) {
+      const item = cart.find(i => i.cartKey === cartKey);
+      if (item) {
+        item.qty += delta;
+        if (item.qty <= 0) {
+          cart = cart.filter(i => i.cartKey !== cartKey);
+        }
+      }
+      updateCartUI();
+    }
+
+    function clearCart() {
+      cart = [];
+      updateCartUI();
+    }
+
+    function updateCartUI() {
+      const count = cart.reduce((a, b) => a + b.qty, 0);
+      const total = cart.reduce((a, b) => a + b.unitPrice * b.qty, 0);
+
+      document.getElementById('cartCount').innerText = count;
+      document.getElementById('cartTotalDisplay').innerText = total.toLocaleString('en-IN');
+
+      const container = document.getElementById('cartItemsList');
+      const btn = document.getElementById('btnCheckout');
+
+      if (cart.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: var(--muted); padding: 40px 10px;">Your cart is currently empty.</div>';
+        btn.disabled = true;
+        btn.style.background = '#9ca3af';
+        btn.style.cursor = 'not-allowed';
+      } else {
+        container.innerHTML = cart.map(i => `
+          <div class="cart-item">
+            <div>
+              <div style="font-weight: 700; font-size: 0.88rem;">${i.name}</div>
+              <div style="font-size: 0.75rem; color: var(--gold); font-weight: 600;">${i.packLabel} • ₹${i.unitPrice} each</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <button class="qty-btn" onclick="updateCartQty('${i.cartKey}', -1)">-</button>
+              <span style="font-weight: 800; min-width: 18px; text-align: center;">${i.qty}</span>
+              <button class="qty-btn" onclick="updateCartQty('${i.cartKey}', 1)">+</button>
+              <span style="font-weight: 800; min-width: 55px; text-align: right; color: var(--primary);">₹${i.unitPrice * i.qty}</span>
+            </div>
+          </div>
+        `).join('');
+        btn.disabled = false;
+        btn.style.background = 'var(--primary)';
+        btn.style.cursor = 'pointer';
+      }
+    }
+
+    function handleCheckout(channel) {
+      if (cart.length === 0) return;
+      const total = cart.reduce((a, b) => a + b.unitPrice * b.qty, 0);
+      const orderId = `TLS-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const name = document.getElementById('custName').value || 'Valued Patron';
+
+      activeOrder = { orderId, total, name, channel, items: [...cart] };
+
+      document.getElementById('modalAmount').innerText = total.toLocaleString('en-IN');
+      document.getElementById('modalOrderId').innerText = orderId;
+
+      const upiString = `upi://pay?pa=theladdu@bank&pn=TheLadduStory&am=${total.toFixed(2)}&cu=INR&tn=${encodeURIComponent('The Laddu Story ' + orderId)}`;
+
+      QRCode.toCanvas(document.getElementById('qrCanvas'), upiString, {
+        width: 200,
+        margin: 1,
+        color: { dark: '#3F111A', light: '#FFFFFF' }
+      });
+
+      document.getElementById('qrModal').style.display = 'flex';
+    }
+
+    function confirmOrderPayment() {
+      if (activeOrder) {
+        activeOrder.items.forEach(i => {
+          sheetsOrders.unshift({
+            orderId: activeOrder.orderId,
+            channel: activeOrder.channel,
+            name: activeOrder.name,
+            sku: i.sku,
+            item: `${i.name} (${i.packLabel})`,
+            qty: i.qty,
+            total: i.unitPrice * i.qty,
+            status: 'RECEIVED'
+          });
+        });
+
+        clearCart();
+        closeQRModal();
+        renderSheetsTables();
+        alert(`🎉 Order ${activeOrder.orderId} logged to Google Sheets (theladdustory@gmail.com)!`);
+      }
+    }
+
+    function closeQRModal() {
+      document.getElementById('qrModal').style.display = 'none';
+    }
+
+    function sendViaWhatsApp() {
+      if (cart.length === 0) { alert('Please select items first!'); return; }
+      const total = cart.reduce((a, b) => a + b.unitPrice * b.qty, 0);
+      const itemsText = cart.map((i, idx) => `${idx + 1}. ${i.name} (${i.packLabel}) x ${i.qty} = ₹${i.unitPrice * i.qty}`).join('%0A');
+      const name = encodeURIComponent(document.getElementById('custName').value || 'Valued Customer');
+      const address = encodeURIComponent(document.getElementById('custAddress').value || 'Store Pickup');
+      const msg = `*Namaste The Laddu Story!* 🙏%0A%0AI would like to order:%0A${itemsText}%0A%0A*Total: ₹${total}*%0A*Customer:* ${name}%0A*Address:* ${address}%0A%0APlease confirm dispatch slot.`;
+      window.open(`https://wa.me/919343207515?text=${msg}`, '_blank');
+    }
+
+    function renderSheetsTables() {
+      // Inventory
+      const invTable = document.getElementById('sheetsInventoryTable');
+      invTable.innerHTML = PRODUCTS.map((p, idx) => {
+        const sold = sheetsOrders.filter(o => o.sku === p.sku).reduce((sum, o) => sum + o.qty, 0);
+        const stock = 50 - sold;
+        return `
+          <tr style="border-bottom: 1px solid #f3f4f6; background: ${idx % 2 === 0 ? '#fff' : '#faf8f5'};">
+            <td style="padding: 10px; font-weight: 700;">#${p.id}</td>
+            <td style="padding: 10px; font-weight: 700; color: var(--primary);">${p.name}</td>
+            <td style="padding: 10px;">${p.category === 'SAVORY' ? p.subname : '₹' + p.ratePerKg + '/Kg'}</td>
+            <td style="padding: 10px;">50 packs</td>
+            <td style="padding: 10px; font-weight: 700; color: var(--gold);">${sold} packs <span style="font-size: 0.7rem; color: var(--muted);">(SUMIF)</span></td>
+            <td style="padding: 10px; font-weight: 800; color: ${stock <= 10 ? '#dc2626' : 'var(--green)'};">${stock} packs</td>
+            <td style="padding: 10px;"><span style="padding: 2px 8px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; background: ${stock <= 10 ? '#fef2f2' : 'var(--green-light)'}; color: ${stock <= 10 ? '#991b1b' : 'var(--green)'};">${stock <= 10 ? '⚠️ REORDER' : '✅ HEALTHY'}</span></td>
+          </tr>
+        `;
+      }).join('');
+
+      // Orders
+      const ordTable = document.getElementById('sheetsOrdersTable');
+      ordTable.innerHTML = sheetsOrders.map(o => `
+        <tr style="border-bottom: 1px solid #f3f4f6;">
+          <td style="padding: 10px; font-weight: 700; color: var(--primary);">${o.orderId}</td>
+          <td style="padding: 10px;"><span style="padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: 800; background: ${o.channel === 'WALK_IN' ? 'var(--gold-light)' : o.channel === 'WHATSAPP' ? 'var(--green-light)' : '#fdf2f8'}; color: ${o.channel === 'WALK_IN' ? '#92400e' : o.channel === 'WHATSAPP' ? 'var(--green)' : '#831843'};">${o.channel}</span></td>
+          <td style="padding: 10px; font-weight: 600;">${o.name}</td>
+          <td style="padding: 10px;">${o.item}</td>
+          <td style="padding: 10px; font-weight: 700;">${o.qty}</td>
+          <td style="padding: 10px; font-weight: 800; color: var(--primary);">₹${o.total.toLocaleString('en-IN')}</td>
+          <td style="padding: 10px;"><span style="background: #f3f4f6; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">${o.status}</span></td>
+        </tr>
+      `).join('');
+    }
+
+    function switchView(v) {
+      ['store', 'pos', 'sheets'].forEach(name => {
+        document.getElementById('view-' + name).style.display = (name === v ? (name === 'store' ? 'grid' : 'block') : 'none');
+        document.getElementById('btn-' + name).classList.toggle('active', name === v);
+      });
+      if (v === 'sheets') renderSheetsTables();
+    }
+
+    // Init
+    renderCatalog();
+    renderSheetsTables();
+  </script>
+</body>
+</html>
