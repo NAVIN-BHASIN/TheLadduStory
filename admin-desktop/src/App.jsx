@@ -17,21 +17,34 @@ const PRODUCTS = [
 ];
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('store'); // 'store', 'admin', 'pos', 'sheets'
+  // Navigation: 'store', 'track', 'admin', 'sheets'
+  const [activeTab, setActiveTab] = useState('store');
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
+  const [adminPinInput, setAdminPinInput] = useState('');
+  const [showLoginModal, setShowLoginModal] = useState(false);
+
+  // Cart & Customer State
   const [cart, setCart] = useState([]);
   const [selectedWeights, setSelectedWeights] = useState({});
-  const [custName, setCustName] = useState('');
-  const [custPhone, setCustPhone] = useState('');
-  const [custAddress, setCustAddress] = useState('');
+  const [custName, setCustName] = useState(() => localStorage.getItem('tls_cust_name') || '');
+  const [custPhone, setCustPhone] = useState(() => localStorage.getItem('tls_cust_phone') || '');
+  const [custAddress, setCustAddress] = useState(() => localStorage.getItem('tls_cust_addr') || '');
+  
+  // Tracking
+  const [trackPhone, setTrackPhone] = useState(() => localStorage.getItem('tls_cust_phone') || '');
+  
+  // UPI QR Modal
   const [showQR, setShowQR] = useState(false);
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
   const [activeOrder, setActiveOrder] = useState(null);
-  const [webhookUrl, setWebhookUrl] = useState(localStorage.getItem('tls_webhook_url') || '');
-  const [statusFilter, setStatusFilter] = useState('ALL');
-  const [searchQuery, setSearchQuery] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Orders State (Master OMS synced)
+  // Webhook URL (For Direct Google Sheets Sync)
+  const [webhookUrl, setWebhookUrl] = useState(() => localStorage.getItem('tls_webhook_url') || '');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Orders State (Master OMS synced with local storage fallback)
   const [orders, setOrders] = useState(() => {
     const saved = localStorage.getItem('tls_orders');
     if (saved) {
@@ -43,7 +56,7 @@ export default function App() {
         time: '2026-10-10 10:15 AM',
         channel: 'ONLINE_APP',
         name: 'Priya Sharma',
-        phone: '+91 98450 12345',
+        phone: '9845012345',
         address: 'Villa 12, Palm Meadows, Whitefield, Bangalore - 560066',
         items: [{ sku: 'RAGI-WALNUT', name: 'Ragi Walnut Laddu', packLabel: '1 Kg (₹1,200)', unitPrice: 1200, qty: 1 }],
         total: 1200,
@@ -55,24 +68,12 @@ export default function App() {
         time: '2026-10-10 11:30 AM',
         channel: 'WHATSAPP',
         name: 'Arun Kumar',
-        phone: '+91 99001 88776',
+        phone: '9900188776',
         address: '4th Cross, 12th Main, Indiranagar, Bangalore - 560038',
         items: [{ sku: 'POST-DELIVERY-PANJEERI', name: 'Post Delivery Panjeeri / Laddu', packLabel: '500g (₹900)', unitPrice: 900, qty: 2 }],
         total: 1800,
         status: 'PACKED',
         paymentMethod: 'UPI'
-      },
-      {
-        orderId: 'TLS-20261010-1003',
-        time: '2026-10-10 12:05 PM',
-        channel: 'WALK_IN',
-        name: 'Meera Nambiar',
-        phone: '+91 93432 07515',
-        address: 'Store Counter Pickup',
-        items: [{ sku: 'SAVORY-MAKHANA', name: 'Savory Munchies (Roasted Makhana)', packLabel: '100g (₹275)', unitPrice: 275, qty: 2 }],
-        total: 550,
-        status: 'RECEIVED',
-        paymentMethod: 'CASH'
       }
     ];
   });
@@ -117,7 +118,10 @@ export default function App() {
 
   // Sync order to Google Sheets
   const syncToGoogleSheets = async (orderPayload) => {
-    if (!webhookUrl) return;
+    if (!webhookUrl) {
+      console.warn('Google Sheets Webhook URL not set. Order saved locally.');
+      return;
+    }
     try {
       await fetch(webhookUrl, {
         method: 'POST',
@@ -125,7 +129,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(orderPayload)
       });
-      console.log('Order successfully sent to Google Sheets webhook!');
+      console.log('Order sent to Google Sheets webhook!');
     } catch (e) {
       console.warn('Google Sheets sync warning:', e);
     }
@@ -138,18 +142,25 @@ export default function App() {
       return;
     }
     if (!custName || !custPhone) {
-      alert('Please enter Customer Name and Mobile Number.');
+      alert('Please enter your Name and Mobile Number.');
       return;
     }
 
     setIsSubmitting(true);
+    // Save customer info in local storage for repeat visits
+    localStorage.setItem('tls_cust_name', custName);
+    localStorage.setItem('tls_cust_phone', custPhone);
+    localStorage.setItem('tls_cust_addr', custAddress);
+    setTrackPhone(custPhone);
+
+    const cleanPhone = custPhone.replace(/\D/g, '').slice(-10);
     const orderId = `TLS-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.floor(1000 + Math.random() * 9000)}`;
     const newOrder = {
       orderId,
       time: new Date().toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }),
-      channel: activeTab === 'pos' ? 'WALK_IN' : 'ONLINE_APP',
+      channel: 'ONLINE_PORTAL',
       name: custName,
-      phone: custPhone,
+      phone: cleanPhone,
       address: custAddress || 'Direct Pickup / Express Delivery',
       items: [...cart],
       total: cartTotal,
@@ -191,17 +202,56 @@ export default function App() {
 
   const confirmPaymentDone = () => {
     setCart([]);
-    setCustName('');
-    setCustPhone('');
-    setCustAddress('');
     setShowQR(false);
-    alert(`🎉 Order ${activeOrder?.orderId} confirmed & logged into Google Sheets!`);
+    alert(`🎉 Thank you, ${custName}! Your order ${activeOrder?.orderId} has been placed. You can track its live status in the 'Track My Orders' tab!`);
+    setActiveTab('track');
+  };
+
+  // Staff Login Handler
+  const handleAdminLogin = () => {
+    if (adminPinInput === '1234') {
+      setIsAdminLoggedIn(true);
+      setShowLoginModal(false);
+      setActiveTab('admin');
+      setAdminPinInput('');
+    } else {
+      alert('Incorrect Staff PIN! Default PIN is 1234');
+    }
   };
 
   // Status Updater (Admin Screen)
   const updateOrderStatus = (orderId, newStatus) => {
     const updated = orders.map(o => o.orderId === orderId ? { ...o, status: newStatus } : o);
     setOrders(updated);
+    // Also update Google Sheets if webhook connected
+    if (webhookUrl) {
+      syncToGoogleSheets({ action: 'updateStatus', orderId, status: newStatus });
+    }
+  };
+
+  const testGoogleSheetConnection = async () => {
+    if (!webhookUrl) {
+      alert('Please enter your Google Apps Script Webhook URL first!');
+      return;
+    }
+    try {
+      await fetch(webhookUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: `TEST-${Math.floor(1000 + Math.random()*9000)}`,
+          name: 'Connection Test Patron',
+          phone: '9343207515',
+          address: 'Google Sheets Live Test',
+          totalAmount: 600,
+          items: [{ sku: 'RAGI-WALNUT', name: 'Ragi Walnut Laddu', pack: '500g', qty: 1, unitPrice: 600 }]
+        })
+      });
+      alert('✅ Test order dispatched! Check your Google Sheet (Orders tab) — a new row should appear momentarily.');
+    } catch (err) {
+      alert('❌ Error sending test order: ' + err.toString());
+    }
   };
 
   const sendWhatsApp = () => {
@@ -212,6 +262,13 @@ export default function App() {
     const msg = `*Namaste The Laddu Story!* 🙏%0A%0AI would like to order:%0A${itemsText}%0A%0A*Total: ₹${cartTotal}*%0A*Customer:* ${name}%0A*Phone:* ${custPhone}%0A*Address:* ${addr}%0A%0APlease confirm my fresh batch dispatch!`;
     window.open(`https://wa.me/919343207515?text=${msg}`, '_blank');
   };
+
+  // Customer order history filtered by phone
+  const cleanTrackPhone = trackPhone.replace(/\D/g, '').slice(-10);
+  const customerOrders = orders.filter(o => {
+    const oPhone = (o.phone || '').replace(/\D/g, '').slice(-10);
+    return cleanTrackPhone && oPhone === cleanTrackPhone;
+  });
 
   // Filtered orders for Admin
   const filteredOrders = orders.filter(o => {
@@ -238,7 +295,7 @@ export default function App() {
   return (
     <div style={{ fontFamily: 'Plus Jakarta Sans, system-ui, sans-serif', background: '#F8FAF9', minHeight: '100vh', color: '#1E293B' }}>
       
-      {/* BRAND TOP BANNER (TEAL PAMPHLET THEME) */}
+      {/* BRAND TOP BANNER */}
       <header style={{ background: '#187A90', color: '#fff', borderBottom: '3px solid #0F5869', padding: '14px 20px', position: 'sticky', top: 0, zIndex: 100 }}>
         <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
           
@@ -256,8 +313,8 @@ export default function App() {
             </div>
           </div>
 
-          {/* NAVIGATION TABS */}
-          <nav style={{ display: 'flex', gap: '6px', background: 'rgba(0,0,0,0.18)', padding: '4px', borderRadius: '10px' }}>
+          {/* CUSTOMER VS STAFF NAVIGATION */}
+          <nav style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(0,0,0,0.18)', padding: '4px', borderRadius: '10px' }}>
             <button
               onClick={() => setActiveTab('store')}
               style={{
@@ -271,10 +328,10 @@ export default function App() {
                 color: activeTab === 'store' ? '#187A90' : '#E0F2FE'
               }}
             >
-              🛒 Customer Store
+              🛒 Order Laddus
             </button>
             <button
-              onClick={() => setActiveTab('admin')}
+              onClick={() => setActiveTab('track')}
               style={{
                 padding: '8px 16px',
                 borderRadius: '8px',
@@ -282,27 +339,69 @@ export default function App() {
                 fontWeight: '700',
                 fontSize: '0.85rem',
                 cursor: 'pointer',
-                background: activeTab === 'admin' ? '#fff' : 'transparent',
-                color: activeTab === 'admin' ? '#187A90' : '#E0F2FE'
+                background: activeTab === 'track' ? '#fff' : 'transparent',
+                color: activeTab === 'track' ? '#187A90' : '#E0F2FE'
               }}
             >
-              📦 Admin Order Manager ({orders.length})
+              🔍 Track My Orders
             </button>
-            <button
-              onClick={() => setActiveTab('sheets')}
-              style={{
-                padding: '8px 16px',
-                borderRadius: '8px',
-                border: 'none',
-                fontWeight: '700',
-                fontSize: '0.85rem',
-                cursor: 'pointer',
-                background: activeTab === 'sheets' ? '#fff' : 'transparent',
-                color: activeTab === 'sheets' ? '#187A90' : '#E0F2FE'
-              }}
-            >
-              📊 Google Sheets OMS
-            </button>
+
+            {/* Admin Tabs (Only shown if staff is logged in) */}
+            {isAdminLoggedIn ? (
+              <>
+                <button
+                  onClick={() => setActiveTab('admin')}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    fontWeight: '700',
+                    fontSize: '0.82rem',
+                    cursor: 'pointer',
+                    background: activeTab === 'admin' ? '#FEF3C7' : 'transparent',
+                    color: activeTab === 'admin' ? '#92400E' : '#FEF3C7'
+                  }}
+                >
+                  📦 Staff Manager ({orders.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab('sheets')}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    fontWeight: '700',
+                    fontSize: '0.82rem',
+                    cursor: 'pointer',
+                    background: activeTab === 'sheets' ? '#FEF3C7' : 'transparent',
+                    color: activeTab === 'sheets' ? '#92400E' : '#FEF3C7'
+                  }}
+                >
+                  📊 Sheets OMS
+                </button>
+                <button
+                  onClick={() => { setIsAdminLoggedIn(false); setActiveTab('store'); }}
+                  style={{ background: 'none', border: 'none', color: '#CBD5E1', fontSize: '0.75rem', cursor: 'pointer', padding: '0 8px' }}
+                >
+                  Logout
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => setShowLoginModal(true)}
+                style={{
+                  background: 'none',
+                  border: '1px dashed rgba(255,255,255,0.4)',
+                  color: '#E0F2FE',
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  fontSize: '0.75rem',
+                  cursor: 'pointer'
+                }}
+              >
+                🔒 Staff Login
+              </button>
+            )}
           </nav>
         </div>
       </header>
@@ -321,7 +420,7 @@ export default function App() {
       <main style={{ maxWidth: '1400px', margin: '0 auto', padding: '24px 20px' }}>
 
         {/* ------------------------------------------------------------- */}
-        {/* VIEW 1: CUSTOMER STOREFRONT (MATCHING FLYER LAYOUT) */}
+        {/* VIEW 1: CUSTOMER STOREFRONT */}
         {/* ------------------------------------------------------------- */}
         {activeTab === 'store' && (
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.8fr) minmax(320px, 1fr)', gap: '28px' }}>
@@ -346,7 +445,6 @@ export default function App() {
                 {PRODUCTS.map(prod => {
                   const choice = getWeight(prod.sku);
                   const price = choice === 'OPT1' ? prod.p500 : prod.p1k;
-                  const packLabel = choice === 'OPT1' ? prod.opt1 : prod.opt2;
 
                   return (
                     <div
@@ -359,12 +457,10 @@ export default function App() {
                         display: 'flex',
                         flexDirection: 'column',
                         justifyContent: 'space-between',
-                        boxShadow: '0 4px 12px rgba(24, 122, 144, 0.05)',
-                        position: 'relative'
+                        boxShadow: '0 4px 12px rgba(24, 122, 144, 0.05)'
                       }}
                     >
                       <div>
-                        {/* Tag & Rate */}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                           <span style={{ fontSize: '0.72rem', fontWeight: '800', background: prod.isMunchy ? '#D6E5BA' : '#E0F2FE', color: prod.isMunchy ? '#2D4A1D' : '#0369A1', padding: '3px 8px', borderRadius: '6px' }}>
                             #{prod.id} {prod.tag}
@@ -374,23 +470,19 @@ export default function App() {
                           </span>
                         </div>
 
-                        {/* Item Name */}
                         <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#0F172A', margin: '0 0 6px' }}>
                           {prod.name}
                         </h3>
 
-                        {/* Ingredients */}
                         <div style={{ fontSize: '0.8rem', color: '#475569', marginBottom: '8px', lineHeight: 1.4 }}>
                           <b>Ingredients:</b> {prod.desc}
                         </div>
 
-                        {/* Health Benefits */}
                         <div style={{ fontSize: '0.78rem', color: '#059669', fontWeight: '600', marginBottom: '14px', background: '#ECFDF5', padding: '6px 8px', borderRadius: '6px' }}>
                           ✨ {prod.benefit}
                         </div>
                       </div>
 
-                      {/* Weight Selector & Add Button */}
                       <div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
                           <button
@@ -465,11 +557,11 @@ export default function App() {
               <div style={{ background: '#fff', borderRadius: '18px', border: '1px solid #E2E8F0', padding: '22px', position: 'sticky', top: '90px', boxShadow: '0 10px 30px rgba(0,0,0,0.04)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #F1F5F9', paddingBottom: '12px', marginBottom: '14px' }}>
                   <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#0F5869', fontWeight: '800' }}>
-                    🛒 Your Order Cart ({cart.reduce((s,i) => s + i.qty, 0)})
+                    🛒 Your Cart ({cart.reduce((s,i) => s + i.qty, 0)})
                   </h3>
                   {cart.length > 0 && (
                     <button onClick={() => setCart([])} style={{ background: 'none', border: 'none', color: '#EF4444', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer' }}>
-                      Clear Cart
+                      Clear
                     </button>
                   )}
                 </div>
@@ -478,7 +570,7 @@ export default function App() {
                   <div style={{ textAlign: 'center', padding: '36px 10px', color: '#94A3B8' }}>
                     <div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>🛍️</div>
                     <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: '600' }}>Your cart is empty.</p>
-                    <p style={{ margin: '4px 0 0', fontSize: '0.78rem' }}>Select your favourite laddus from the left.</p>
+                    <p style={{ margin: '4px 0 0', fontSize: '0.78rem' }}>Choose your handcrafted laddus from the left.</p>
                   </div>
                 ) : (
                   <div>
@@ -504,7 +596,7 @@ export default function App() {
                     {/* Customer Inputs */}
                     <div style={{ background: '#F8FAFC', padding: '14px', borderRadius: '12px', marginBottom: '16px', border: '1px solid #E2E8F0' }}>
                       <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#475569', marginBottom: '8px' }}>
-                        DELIVERY & CONTACT DETAILS
+                        YOUR CONTACT & DELIVERY INFO
                       </div>
                       <input
                         type="text"
@@ -515,7 +607,7 @@ export default function App() {
                       />
                       <input
                         type="tel"
-                        placeholder="Mobile Number (+91...) *"
+                        placeholder="10-Digit Mobile Number (+91...) *"
                         value={custPhone}
                         onChange={e => setCustPhone(e.target.value)}
                         style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem', marginBottom: '8px' }}
@@ -530,7 +622,7 @@ export default function App() {
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '14px' }}>
-                      <span style={{ fontSize: '1rem', fontWeight: '700', color: '#475569' }}>Total Payable:</span>
+                      <span style={{ fontSize: '1rem', fontWeight: '700', color: '#475569' }}>Total Amount:</span>
                       <span style={{ fontSize: '1.8rem', fontWeight: '900', color: '#187A90' }}>₹{cartTotal.toLocaleString('en-IN')}</span>
                     </div>
 
@@ -552,7 +644,7 @@ export default function App() {
                         marginBottom: '8px'
                       }}
                     >
-                      {isSubmitting ? 'Processing...' : '⚡ Place Order & Pay via UPI QR'}
+                      {isSubmitting ? 'Recording Order...' : '⚡ Place Order & Pay via UPI QR'}
                     </button>
 
                     <button
@@ -585,23 +677,110 @@ export default function App() {
         )}
 
         {/* ------------------------------------------------------------- */}
-        {/* VIEW 2: ADMIN ORDER MANAGER (TRACK & CHANGE STATUS) */}
+        {/* VIEW 2: CUSTOMER ORDER HISTORY & LIVE STATUS TRACKER */}
         {/* ------------------------------------------------------------- */}
-        {activeTab === 'admin' && (
+        {activeTab === 'track' && (
+          <div style={{ maxWidth: '820px', margin: '0 auto', background: '#fff', borderRadius: '18px', border: '1px solid #E2E8F0', padding: '28px', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
+            <h2 style={{ color: '#0F5869', margin: '0 0 6px', fontSize: '1.4rem', fontWeight: '800' }}>
+              🔍 Track My Orders & Purchase History
+            </h2>
+            <p style={{ margin: '0 0 20px', fontSize: '0.88rem', color: '#64748B' }}>
+              Enter your registered mobile number to see all your orders and live preparation/delivery status.
+            </p>
+
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '24px' }}>
+              <input
+                type="tel"
+                placeholder="Enter 10-Digit Mobile Number (e.g. 9845012345)"
+                value={trackPhone}
+                onChange={e => setTrackPhone(e.target.value)}
+                style={{ flex: 1, padding: '12px 16px', borderRadius: '10px', border: '1px solid #CBD5E1', fontSize: '1rem', fontWeight: '600' }}
+              />
+              <button
+                onClick={() => setTrackPhone(trackPhone)}
+                style={{ background: '#187A90', color: '#fff', border: 'none', padding: '12px 24px', borderRadius: '10px', fontWeight: '800', cursor: 'pointer' }}
+              >
+                Find Orders
+              </button>
+            </div>
+
+            {/* Orders Timeline List */}
+            {cleanTrackPhone && customerOrders.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px', background: '#F8FAFC', borderRadius: '12px', border: '1px dashed #CBD5E1' }}>
+                <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📦</div>
+                <p style={{ margin: 0, fontWeight: '700', color: '#475569' }}>No orders found for {trackPhone}</p>
+                <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: '#64748B' }}>Check if the mobile number is correct, or place a new order!</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {customerOrders.map(order => {
+                  const style = statusColor(order.status);
+                  return (
+                    <div
+                      key={order.orderId}
+                      style={{
+                        background: '#fff',
+                        border: '1px solid #E2E8F0',
+                        borderLeft: `6px solid ${style.text}`,
+                        borderRadius: '14px',
+                        padding: '18px 20px',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontWeight: '900', color: '#0F5869', fontSize: '1.05rem' }}>{order.orderId}</span>
+                            <span style={{ fontSize: '0.78rem', color: '#64748B' }}>🕒 {order.time}</span>
+                          </div>
+                          <div style={{ fontSize: '0.85rem', color: '#475569', marginTop: '2px' }}>
+                            Delivering to: <b>{order.name}</b> • {order.address}
+                          </div>
+                        </div>
+
+                        <span style={{ background: style.bg, color: style.text, border: `1px solid ${style.border}`, padding: '6px 16px', borderRadius: '20px', fontSize: '0.82rem', fontWeight: '800' }}>
+                          ● {order.status.replace(/_/g, ' ')}
+                        </span>
+                      </div>
+
+                      {/* Items */}
+                      <div style={{ background: '#F8FAFC', padding: '12px', borderRadius: '8px', border: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                          {order.items.map((it, idx) => (
+                            <span key={idx} style={{ background: '#fff', border: '1px solid #CBD5E1', padding: '4px 10px', borderRadius: '6px', fontSize: '0.82rem', fontWeight: '600' }}>
+                              <b>{it.qty}x</b> {it.name} ({it.packLabel})
+                            </span>
+                          ))}
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#64748B' }}>Paid: </span>
+                          <b style={{ fontSize: '1.15rem', color: '#0F5869' }}>₹{order.total.toLocaleString('en-IN')}</b>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------- */}
+        {/* VIEW 3: ADMIN ORDER MANAGER (STAFF ONLY) */}
+        {/* ------------------------------------------------------------- */}
+        {activeTab === 'admin' && isAdminLoggedIn && (
           <div style={{ background: '#fff', borderRadius: '18px', border: '1px solid #E2E8F0', padding: '24px', boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}>
             
-            {/* Header with Stats */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', marginBottom: '20px', borderBottom: '2px solid #F1F5F9', paddingBottom: '16px' }}>
               <div>
                 <h2 style={{ margin: 0, color: '#0F5869', fontSize: '1.4rem', fontWeight: '800' }}>
-                  📦 Admin Order Management & Dispatch Center
+                  📦 Store Order Management & Dispatch Center
                 </h2>
                 <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: '#64748B' }}>
-                  Manage batches, update preparation, dispatch, and delivery status in real time.
+                  Kitchen & Dispatch Portal | Change status to update customers in real-time.
                 </p>
               </div>
 
-              {/* Status Counters */}
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                 <span style={{ background: '#FEF3C7', color: '#92400E', padding: '6px 12px', borderRadius: '8px', fontSize: '0.78rem', fontWeight: '800' }}>
                   Received: {orders.filter(o => o.status === 'RECEIVED').length}
@@ -720,7 +899,7 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* Items Ordered List */}
+                      {/* Items */}
                       <div style={{ background: '#F8FAFC', borderRadius: '8px', padding: '12px 14px', border: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                         <div>
                           <div style={{ fontSize: '0.78rem', fontWeight: '800', color: '#64748B', marginBottom: '4px' }}>
@@ -753,9 +932,9 @@ export default function App() {
         )}
 
         {/* ------------------------------------------------------------- */}
-        {/* VIEW 3: GOOGLE SHEETS OMS & WEBHOOK CONFIGURATION */}
+        {/* VIEW 4: GOOGLE SHEETS LIVE OMS & WEBHOOK CONFIGURATION */}
         {/* ------------------------------------------------------------- */}
-        {activeTab === 'sheets' && (
+        {activeTab === 'sheets' && isAdminLoggedIn && (
           <div style={{ background: '#fff', borderRadius: '18px', border: '1px solid #E2E8F0', padding: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #F1F5F9', paddingBottom: '14px', marginBottom: '18px' }}>
               <div>
@@ -772,26 +951,32 @@ export default function App() {
             </div>
 
             {/* Webhook Configuration Bar */}
-            <div style={{ background: '#F0F9FF', border: '1px solid #BAE6FD', padding: '16px', borderRadius: '12px', marginBottom: '24px' }}>
-              <div style={{ fontWeight: '800', color: '#0369A1', fontSize: '0.9rem', marginBottom: '6px' }}>
+            <div style={{ background: '#F0F9FF', border: '1px solid #BAE6FD', padding: '18px', borderRadius: '12px', marginBottom: '24px' }}>
+              <div style={{ fontWeight: '800', color: '#0369A1', fontSize: '0.95rem', marginBottom: '6px' }}>
                 🔗 Google Apps Script Webhook URL (For Direct Google Sheets Sync)
               </div>
-              <p style={{ margin: '0 0 10px', fontSize: '0.82rem', color: '#334155' }}>
+              <p style={{ margin: '0 0 10px', fontSize: '0.85rem', color: '#334155', lineHeight: 1.4 }}>
                 Paste your deployed Google Apps Script `/exec` URL below. Every customer order placed on GitHub Pages will automatically save into your Google Sheet!
               </p>
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 <input
                   type="url"
                   placeholder="https://script.google.com/macros/s/AKfycb.../exec"
                   value={webhookUrl}
                   onChange={e => saveWebhook(e.target.value)}
-                  style={{ flex: 1, padding: '10px 14px', borderRadius: '8px', border: '1px solid #94A3B8', fontSize: '0.85rem' }}
+                  style={{ flex: 1, minWidth: '320px', padding: '10px 14px', borderRadius: '8px', border: '1px solid #94A3B8', fontSize: '0.85rem' }}
                 />
                 <button
                   onClick={() => alert('Webhook URL Saved!')}
-                  style={{ background: '#187A90', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
+                  style={{ background: '#187A90', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
                 >
                   Save URL
+                </button>
+                <button
+                  onClick={testGoogleSheetConnection}
+                  style={{ background: '#059669', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
+                >
+                  🧪 Test Connection
                 </button>
               </div>
             </div>
@@ -850,6 +1035,38 @@ export default function App() {
         )}
 
       </main>
+
+      {/* STAFF LOGIN MODAL */}
+      {showLoginModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div style={{ background: '#fff', borderRadius: '18px', padding: '28px', maxWidth: '340px', width: '90%', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.25)' }}>
+            <h3 style={{ margin: '0 0 6px', color: '#0F5869', fontSize: '1.25rem' }}>Store Staff Login</h3>
+            <p style={{ margin: '0 0 16px', fontSize: '0.82rem', color: '#64748B' }}>Enter 4-digit staff PIN to access order dispatch & Google Sheets OMS.</p>
+            <input
+              type="password"
+              maxLength={4}
+              placeholder="PIN (Default: 1234)"
+              value={adminPinInput}
+              onChange={e => setAdminPinInput(e.target.value)}
+              style={{ width: '100%', boxSizing: 'border-box', textAlign: 'center', fontSize: '1.4rem', letterSpacing: '6px', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1', marginBottom: '16px' }}
+            />
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={handleAdminLogin}
+                style={{ flex: 1, padding: '10px', background: '#187A90', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '800', cursor: 'pointer' }}
+              >
+                Unlock
+              </button>
+              <button
+                onClick={() => setShowLoginModal(false)}
+                style={{ padding: '10px 14px', background: '#E2E8F0', color: '#475569', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* UPI QR PAYMENT MODAL */}
       {showQR && (
