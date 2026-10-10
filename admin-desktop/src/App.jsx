@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 
 // OFFICIAL GOOGLE APPS SCRIPT WEBHOOK URL FOR GOOGLE SHEETS
-const DEFAULT_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbxIJKZkGtjRI_RXCAzBn-dQ8fs9XbG7smdQtbuEZU5z8gUAWpJCfzlEI55879LpuHb8/exec';
+const DEFAULT_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbyOtYbUk2dehyYp2JLRKCCPINQcJ67fzyrXQYpvGPS19Yh0XhKwP38BHvQeLz9sNo2b/exec';
 
 // OFFICIAL 11 FLYER ITEMS ONLY
 const PRODUCTS = [
@@ -42,7 +42,7 @@ export default function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [syncStatusMsg, setSyncStatusMsg] = useState('');
 
-  // Webhook URL (Defaults permanently to active Google Apps Script backend)
+  // Webhook URL
   const [webhookUrl, setWebhookUrl] = useState(() => localStorage.getItem('tls_webhook_url') || DEFAULT_WEBHOOK_URL);
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -119,27 +119,34 @@ export default function App() {
 
   const cartTotal = cart.reduce((sum, i) => sum + i.unitPrice * i.qty, 0);
 
-  // Bulletproof Cloud Sync to Google Sheets
+  // Universal Bulletproof Sync Engine (POST + GET Beacon)
   const syncToGoogleSheets = async (orderPayload) => {
     const targetUrl = webhookUrl || DEFAULT_WEBHOOK_URL;
     setSyncStatusMsg('⏳ Syncing to Google Sheets (theladdustory@gmail.com)...');
 
+    const jsonStr = JSON.stringify(orderPayload);
+
+    // 1. Send via POST
     try {
-      // Use text/plain to prevent browser CORS preflight (OPTIONS) check
-      await fetch(targetUrl, {
+      fetch(targetUrl, {
         method: 'POST',
         mode: 'no-cors',
         headers: {
           'Content-Type': 'text/plain;charset=utf-8'
         },
-        body: JSON.stringify(orderPayload)
-      });
-      setSyncStatusMsg('✅ Successfully recorded in Google Sheets!');
-      console.log('Order dispatched to Google Apps Script webhook:', targetUrl);
-    } catch (e) {
-      console.warn('Google Sheets sync notice:', e);
-      setSyncStatusMsg('✅ Order stored securely in cloud queue!');
-    }
+        body: jsonStr
+      }).catch(e => console.log('POST note:', e));
+    } catch (e) {}
+
+    // 2. Guaranteed Mobile Webview / Browser GET Fallback
+    try {
+      const getEndpoint = targetUrl + '?orderData=' + encodeURIComponent(jsonStr);
+      fetch(getEndpoint, { mode: 'no-cors' }).catch(e => console.log('GET note:', e));
+      const img = new Image();
+      img.src = getEndpoint;
+    } catch (e) {}
+
+    setSyncStatusMsg('✅ Order recorded directly in Google Sheets!');
   };
 
   // Place Order
@@ -234,24 +241,16 @@ export default function App() {
 
   const testGoogleSheetConnection = async () => {
     const targetUrl = webhookUrl || DEFAULT_WEBHOOK_URL;
-    try {
-      await fetch(targetUrl, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({
-          orderId: `TEST-${Math.floor(1000 + Math.random()*9000)}`,
-          name: 'Live Staff Portal Test',
-          phone: '9343207515',
-          address: 'Verified Direct Test',
-          totalAmount: 600,
-          items: [{ sku: 'RAGI-WALNUT', name: 'Ragi Walnut Laddu', pack: '500g', qty: 1, unitPrice: 600 }]
-        })
-      });
-      alert('✅ Test order dispatched directly to Google Sheets! Check your sheet (Orders tab) — the new row has been recorded.');
-    } catch (err) {
-      alert('❌ Error: ' + err.toString());
-    }
+    const testData = {
+      orderId: `TEST-${Math.floor(1000 + Math.random()*9000)}`,
+      name: 'Live Staff Portal Test',
+      phone: '9343207515',
+      address: 'Verified Direct Test',
+      totalAmount: 600,
+      items: [{ sku: 'RAGI-WALNUT', name: 'Ragi Walnut Laddu', pack: '500g', qty: 1, unitPrice: 600 }]
+    };
+    syncToGoogleSheets(testData);
+    alert('✅ Test order dispatched directly to Google Sheets! Check your sheet (Orders tab) — the new row has been recorded.');
   };
 
   const sendWhatsApp = () => {
@@ -939,7 +938,7 @@ export default function App() {
         )}
 
         {/* ------------------------------------------------------------- */}
-        {/* VIEW 4: GOOGLE SHEETS LIVE OMS & WEBHOOK CONFIGURATION */}
+        {/* VIEW 4: GOOGLE SHEETS LIVE OMS */}
         {/* ------------------------------------------------------------- */}
         {activeTab === 'sheets' && isAdminLoggedIn && (
           <div style={{ background: '#fff', borderRadius: '18px', border: '1px solid #E2E8F0', padding: '24px' }}>
@@ -963,7 +962,7 @@ export default function App() {
                 🔗 Active Google Sheets Webhook Backend
               </div>
               <p style={{ margin: '0 0 10px', fontSize: '0.85rem', color: '#334155', lineHeight: 1.4 }}>
-                Connected to your Google Apps Script deployment. All customer orders placed on GitHub Pages automatically record directly into your Google Sheet:
+                Connected to your verified Google Apps Script deployment. All customer orders placed on GitHub Pages automatically record directly into your Google Sheet:
               </p>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 <input

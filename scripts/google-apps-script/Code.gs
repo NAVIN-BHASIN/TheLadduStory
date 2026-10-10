@@ -2,37 +2,80 @@
  * =========================================================================
  * THE LADDU STORY - Cloud API & Master OMS Backend
  * Connected to: theladdustory@gmail.com | Hotline: +91 9343207515
- * Serves: GitHub Pages Web App & Google Sheets
+ * Universally Supports: GET, POST, Hidden Form, and Fetch
  * =========================================================================
  */
 
-// 1. GET Request Handler (Fetches Orders or Serves Web App)
+// 1. GET Request Handler (Fetches Orders or Records Orders via GET)
 function doGet(e) {
-  const action = (e && e.parameter && e.parameter.action) ? e.parameter.action : '';
-  
-  if (action === 'getOrders') {
+  // A. Order placement via GET (Universal Fallback for Mobile Webviews)
+  if (e && e.parameter && e.parameter.orderData) {
+    try {
+      var data = JSON.parse(e.parameter.orderData);
+      var res = submitCustomerOrder(data);
+      return ContentService.createTextOutput(JSON.stringify(res))
+        .setMimeType(ContentService.MimeType.JSON);
+    } catch(err) {
+      return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+  }
+
+  // B. Order Query
+  if (e && e.parameter && e.parameter.action === 'getOrders') {
     return getOrdersJson();
   }
 
-  // Fallback to OrderForm if accessed directly
+  // C. Default: Serve OrderForm HTML
   return HtmlService.createHtmlOutputFromFile('OrderForm')
     .setTitle('The Laddu Story - Official Online Order Form')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1.0');
 }
 
-// 2. POST Request Handler (Receives orders from GitHub Pages)
+// 2. POST Request Handler (Handles JSON, Form Encoded, & Raw Fetch)
 function doPost(e) {
   try {
-    const postData = JSON.parse(e.postData.contents);
+    var postData = null;
 
-    // Case A: Status Update from Admin Portal
+    // A. Sent via Hidden Form with input name="orderData"
+    if (e && e.parameter && e.parameter.orderData) {
+      try {
+        postData = JSON.parse(e.parameter.orderData);
+      } catch (e1) {
+        postData = e.parameter.orderData;
+      }
+    }
+    // B. Sent via raw JSON body (Fetch)
+    else if (e && e.postData && e.postData.contents) {
+      try {
+        postData = JSON.parse(e.postData.contents);
+      } catch (e2) {
+        // If body is URL encoded
+        if (e.parameter && e.parameter.orderData) {
+          postData = JSON.parse(e.parameter.orderData);
+        } else {
+          postData = e.parameter;
+        }
+      }
+    }
+    // C. Sent via standard URL parameters
+    else if (e && e.parameter) {
+      postData = e.parameter;
+    }
+
+    if (!postData) {
+      return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'No order data received' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // Status Update from Admin Portal
     if (postData.action === 'updateStatus') {
       return updateOrderStatusInSheet(postData.orderId, postData.status);
     }
 
-    // Case B: New Customer Order
-    const result = submitCustomerOrder(postData);
+    // Customer Order
+    var result = submitCustomerOrder(postData);
     return ContentService.createTextOutput(JSON.stringify(result))
       .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
@@ -44,37 +87,58 @@ function doPost(e) {
 // 3. Submits customer order to Orders sheet
 function submitCustomerOrder(orderData) {
   try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    let ordersSheet = ss.getSheetByName('Orders');
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ordersSheet = ss.getSheetByName('Orders');
     if (!ordersSheet) {
       applyFlyerTheme();
       ordersSheet = ss.getSheetByName('Orders');
     }
 
-    const orderId = orderData.orderId || ('TLS-' + Utilities.formatDate(new Date(), 'Asia/Kolkata', 'yyyyMMdd') + '-' + Math.floor(1000 + Math.random() * 9000));
-    const timestamp = Utilities.formatDate(new Date(), 'Asia/Kolkata', 'yyyy-MM-dd HH:mm:ss');
+    var orderId = orderData.orderId || ('TLS-' + Utilities.formatDate(new Date(), 'Asia/Kolkata', 'yyyyMMdd') + '-' + Math.floor(1000 + Math.random() * 9000));
+    var timestamp = Utilities.formatDate(new Date(), 'Asia/Kolkata', 'yyyy-MM-dd HH:mm:ss');
 
-    // Append each item
-    orderData.items.forEach(item => {
+    if (orderData.items && Array.isArray(orderData.items)) {
+      orderData.items.forEach(function(item) {
+        ordersSheet.appendRow([
+          orderId,
+          timestamp,
+          'GITHUB_WEB_APP',
+          orderData.name,
+          "'" + orderData.phone,
+          item.sku,
+          item.name,
+          item.pack,
+          item.qty,
+          item.unitPrice,
+          item.unitPrice * item.qty,
+          orderData.paymentMethod || 'UPI',
+          orderData.paymentMethod === 'CASH' ? 'UNPAID' : 'PENDING_UPI',
+          'RECEIVED',
+          orderData.address || '',
+          orderData.notes || ''
+        ]);
+      });
+    } else {
+      // Single item fallback
       ordersSheet.appendRow([
         orderId,
         timestamp,
         'GITHUB_WEB_APP',
         orderData.name,
         "'" + orderData.phone,
-        item.sku,
-        item.name,
-        item.pack,
-        item.qty,
-        item.unitPrice,
-        item.unitPrice * item.qty,
-        orderData.paymentMethod || 'UPI',
-        orderData.paymentMethod === 'CASH' ? 'UNPAID' : 'PENDING_UPI',
+        orderData.sku || 'LADDU-ITEM',
+        orderData.itemName || 'Assorted Laddus',
+        orderData.pack || '500g',
+        orderData.qty || 1,
+        orderData.totalAmount || 600,
+        orderData.totalAmount || 600,
+        'UPI',
+        'PENDING_UPI',
         'RECEIVED',
         orderData.address || '',
-        orderData.notes || ''
+        ''
       ]);
-    });
+    }
 
     return { success: true, orderId: orderId, total: orderData.totalAmount };
   } catch (err) {
@@ -85,16 +149,16 @@ function submitCustomerOrder(orderData) {
 // 4. Updates order status in Orders sheet
 function updateOrderStatusInSheet(orderId, newStatus) {
   try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const sheet = ss.getSheetByName('Orders');
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('Orders');
     if (!sheet) return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'No Orders sheet' })).setMimeType(ContentService.MimeType.JSON);
 
-    const data = sheet.getDataRange().getValues();
-    let updated = false;
+    var data = sheet.getDataRange().getValues();
+    var updated = false;
 
-    for (let i = 1; i < data.length; i++) {
-      if (data[i][0] === orderId) { // Column A: OrderID
-        sheet.getRange(i + 1, 14).setValue(newStatus); // Column N: OrderStatus
+    for (var i = 1; i < data.length; i++) {
+      if (data[i][0] === orderId) {
+        sheet.getRange(i + 1, 14).setValue(newStatus);
         updated = true;
       }
     }
@@ -110,28 +174,29 @@ function updateOrderStatusInSheet(orderId, newStatus) {
 // 5. Returns recent orders as JSON
 function getOrdersJson() {
   try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const sheet = ss.getSheetByName('Orders');
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('Orders');
     if (!sheet) return ContentService.createTextOutput(JSON.stringify([])).setMimeType(ContentService.MimeType.JSON);
 
-    const values = sheet.getDataRange().getValues();
-    const headers = values[0];
-    const rows = values.slice(1);
+    var values = sheet.getDataRange().getValues();
+    var rows = values.slice(1);
 
-    const orders = rows.map(r => ({
-      orderId: r[0],
-      timestamp: r[1],
-      channel: r[2],
-      name: r[3],
-      phone: r[4],
-      sku: r[5],
-      item: r[6],
-      pack: r[7],
-      qty: r[8],
-      total: r[10],
-      status: r[13],
-      address: r[14]
-    }));
+    var orders = rows.map(function(r) {
+      return {
+        orderId: r[0],
+        timestamp: r[1],
+        channel: r[2],
+        name: r[3],
+        phone: r[4],
+        sku: r[5],
+        item: r[6],
+        pack: r[7],
+        qty: r[8],
+        total: r[10],
+        status: r[13],
+        address: r[14]
+      };
+    });
 
     return ContentService.createTextOutput(JSON.stringify(orders))
       .setMimeType(ContentService.MimeType.JSON);
@@ -144,9 +209,9 @@ function getOrdersJson() {
  * 1-Click Function to style the Google Sheet with Flyer Layout & Colors!
  */
 function applyFlyerTheme() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
   
-  let inv = ss.getSheetByName('Menu_&_Inventory') || ss.getSheetByName('Inventory');
+  var inv = ss.getSheetByName('Menu_&_Inventory') || ss.getSheetByName('Inventory');
   if (!inv) {
     inv = ss.insertSheet('Menu_&_Inventory', 0);
   } else {
@@ -165,12 +230,11 @@ function applyFlyerTheme() {
   inv.getRange('A3:I3').merge().setValue('Laddus are made using pure cow ghee and unrefined jaggery powder as sweetener (Minimum order quantity- 500gms)').setFontFamily('Segoe UI').setFontSize(9).setFontStyle('italic').setFontColor('#92400E').setBackground('#FEF3C7').setHorizontalAlignment('center').setVerticalAlignment('middle');
   inv.setRowHeight(3, 26);
 
-  // Headers (Teal #187A90)
-  const headers = [['#', 'Item', 'Category', 'Official Price', 'Opening Stock (Packs)', 'Packs Sold (=SUMIF)', 'Current Stock', 'Min Threshold', 'Reorder Alert']];
+  var headers = [['#', 'Item', 'Category', 'Official Price', 'Opening Stock (Packs)', 'Packs Sold (=SUMIF)', 'Current Stock', 'Min Threshold', 'Reorder Alert']];
   inv.getRange('A5:I5').setValues(headers).setFontFamily('Segoe UI').setFontSize(11).setFontWeight('bold').setFontColor('#FFFFFF').setBackground('#187A90').setHorizontalAlignment('center').setVerticalAlignment('middle');
   inv.setRowHeight(5, 32);
 
-  const items = [
+  var items = [
     ['01', 'Ragi Walnut Laddu', 'LADDU', '₹1,200 / Kg (Min 500g: ₹600)', 50, '=SUMIF(Orders!G:G, B6, Orders!I:I)', '=E6-F6', 10, '=IF(G6<=H6, "⚠️ REORDER NOW", "✅ HEALTHY")'],
     ['02', 'Till Laddu (Black Sesame)', 'LADDU', '₹1,000 / Kg (Min 500g: ₹500)', 50, '=SUMIF(Orders!G:G, B7, Orders!I:I)', '=E7-F7', 10, '=IF(G7<=H7, "⚠️ REORDER NOW", "✅ HEALTHY")'],
     ['03', 'Sattu Almond Laddu', 'LADDU', '₹1,100 / Kg (Min 500g: ₹550)', 50, '=SUMIF(Orders!G:G, B8, Orders!I:I)', '=E8-F8', 10, '=IF(G8<=H8, "⚠️ REORDER NOW", "✅ HEALTHY")'],
@@ -186,11 +250,11 @@ function applyFlyerTheme() {
 
   inv.getRange(6, 1, items.length, 9).setValues(items).setFontFamily('Segoe UI').setFontSize(10);
 
-  for (let r = 6; r <= 16; r++) {
+  for (var r = 6; r <= 16; r++) {
     inv.setRowHeight(r, 26);
-    const range = inv.getRange(r, 1, 1, 9);
+    var range = inv.getRange(r, 1, 1, 9);
     if (r >= 15) {
-      range.setBackground('#D6E5BA'); // Pistachio green
+      range.setBackground('#D6E5BA');
     } else if (r % 2 === 0) {
       range.setBackground('#F2F8FA');
     } else {
@@ -208,13 +272,13 @@ function applyFlyerTheme() {
   inv.getRange('A5:I16').setBorder(true, true, true, true, true, true, '#CBD5E1', SpreadsheetApp.BorderStyle.SOLID);
   inv.setFrozenRows(5);
 
-  for (let c = 1; c <= 9; c++) inv.autoResizeColumn(c);
+  for (var c = 1; c <= 9; c++) inv.autoResizeColumn(c);
 
-  let orders = ss.getSheetByName('Orders');
+  var orders = ss.getSheetByName('Orders');
   if (!orders) orders = ss.insertSheet('Orders', 1);
   orders.setTabColor('#187A90');
 
-  const orderHeaders = [['OrderID', 'Timestamp', 'Channel', 'CustomerName', 'CustomerPhone', 'SKU', 'ItemName', 'PackWeight', 'Quantity', 'UnitAmount', 'TotalAmount', 'PaymentMethod', 'PaymentStatus', 'OrderStatus', 'DeliveryAddress', 'Notes']];
+  var orderHeaders = [['OrderID', 'Timestamp', 'Channel', 'CustomerName', 'CustomerPhone', 'SKU', 'ItemName', 'PackWeight', 'Quantity', 'UnitAmount', 'TotalAmount', 'PaymentMethod', 'PaymentStatus', 'OrderStatus', 'DeliveryAddress', 'Notes']];
   orders.getRange('A1:P1').setValues(orderHeaders).setFontFamily('Segoe UI').setFontSize(10).setFontWeight('bold').setFontColor('#FFFFFF').setBackground('#187A90').setHorizontalAlignment('center').setVerticalAlignment('middle');
   orders.setRowHeight(1, 30);
   orders.setFrozenRows(1);
