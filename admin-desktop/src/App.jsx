@@ -876,7 +876,18 @@ export default function App() {
     // Submit to Google Sheets
     submitToGoogleSheets(newOrder);
 
-    // Broadcast immediately to Cloud for real-time Staff OMS sync
+    // Broadcast immediately in Real-Time to all Staff & Customer devices (0ms delay)
+    try {
+      fetch(REALTIME_TOPIC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'NEW_ORDER',
+          order: newOrder,
+          timestamp: new Date().toISOString()
+        })
+      });
+    } catch(err) {}
     syncWithCloud(updatedOrders, products);
 
     // Generate UPI QR
@@ -905,14 +916,46 @@ export default function App() {
     }
   };
 
-  // Update order delivery status & broadcast to Cloud
+  // Update order delivery status & broadcast in Real-Time to all devices + Google Sheets
   const updateOrderStatus = async (orderId, newStatus) => {
     const updated = orders.map(o => o.orderId === orderId ? { ...o, status: newStatus } : o);
     setOrders(updated);
     try {
       localStorage.setItem('tls_orders_db', JSON.stringify(updated));
     } catch (e) {}
-    // Broadcast status change immediately to cloud
+
+    // 1. Instant Real-Time Push to all Customer & Staff devices (0ms delay)
+    try {
+      await fetch(REALTIME_TOPIC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'STATUS_UPDATE',
+          orderId,
+          status: newStatus,
+          timestamp: new Date().toISOString()
+        })
+      });
+      setIsCloudSynced(true);
+      setLastSyncTime(new Date().toLocaleTimeString());
+    } catch(err) {}
+
+    // 2. Direct Update in Google Sheets via Apps Script Web App
+    try {
+      await fetch(APPS_SCRIPT_EXEC_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({
+          action: 'updateStatus',
+          orderId,
+          status: newStatus,
+          items: []
+        })
+      });
+    } catch(err) {}
+
+    // 3. Fallback cloud state
     await syncWithCloud(updated, products);
   };
 
