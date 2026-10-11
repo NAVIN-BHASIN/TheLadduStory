@@ -413,11 +413,21 @@ export default function App() {
   const [adminPinInput, setAdminPinInput] = useState('');
   const [showLoginModal, setShowLoginModal] = useState(false);
 
-  // Customer Account Session
+  // Customer Account Session (Auto-heals cached "Valued Customer" to actual real name from Master Registry)
   const [customerUser, setCustomerUser] = useState(() => {
     try {
       const saved = localStorage.getItem('tls_active_customer');
-      return saved ? JSON.parse(saved) : null;
+      if (!saved) return null;
+      const parsed = JSON.parse(saved);
+      if (parsed && parsed.phone) {
+        const clean = parsed.phone.replace(/\D/g, '').slice(-10);
+        if ((!parsed.name || parsed.name === 'Valued Customer') && MASTER_CUSTOMER_REGISTRY[clean]) {
+          parsed.name = MASTER_CUSTOMER_REGISTRY[clean].name;
+          if (!parsed.address) parsed.address = MASTER_CUSTOMER_REGISTRY[clean].address;
+          localStorage.setItem('tls_active_customer', JSON.stringify(parsed));
+        }
+      }
+      return parsed;
     } catch (e) {
       return null;
     }
@@ -473,12 +483,25 @@ export default function App() {
     } catch (e) {}
   }, [orders]);
 
-  // Sync inputs when customer profile changes
+  // Sync inputs & ensure customer name is properly resolved
   useEffect(() => {
-    if (customerUser) {
-      setCustName(customerUser.name || '');
-      setCustPhone(customerUser.phone || '');
-      setCustAddress(customerUser.address || '');
+    if (customerUser && customerUser.phone) {
+      const clean = customerUser.phone.replace(/\D/g, '').slice(-10);
+      if ((!customerUser.name || customerUser.name === 'Valued Customer') && MASTER_CUSTOMER_REGISTRY[clean]) {
+        const upgraded = {
+          ...customerUser,
+          name: MASTER_CUSTOMER_REGISTRY[clean].name,
+          address: customerUser.address || MASTER_CUSTOMER_REGISTRY[clean].address
+        };
+        setCustomerUser(upgraded);
+        try {
+          localStorage.setItem('tls_active_customer', JSON.stringify(upgraded));
+        } catch (e) {}
+      } else {
+        setCustName(customerUser.name || '');
+        setCustPhone(customerUser.phone || '');
+        setCustAddress(customerUser.address || '');
+      }
     }
   }, [customerUser]);
 
@@ -765,6 +788,7 @@ export default function App() {
         </h3>
         {isMobileCartOpen && (
           <button 
+            id="close-mobile-cart-btn"
             onClick={() => setIsMobileCartOpen(false)}
             style={{ background: '#F1F5F9', border: 'none', borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer', fontWeight: 'bold' }}
           >
@@ -832,6 +856,7 @@ export default function App() {
               )}
             </div>
             <input
+              id="checkout-cust-name"
               type="text"
               placeholder="Your Full Name *"
               value={custName}
@@ -839,6 +864,7 @@ export default function App() {
               style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem', marginBottom: '8px' }}
             />
             <input
+              id="checkout-cust-phone"
               type="tel"
               placeholder="10-Digit Mobile Number (Primary ID) *"
               value={custPhone}
@@ -846,6 +872,7 @@ export default function App() {
               style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem', marginBottom: '8px' }}
             />
             <textarea
+              id="checkout-cust-address"
               rows={2}
               placeholder="Complete Delivery Address with Pincode *"
               value={custAddress}
@@ -871,6 +898,7 @@ export default function App() {
           </div>
 
           <button
+            id="place-order-btn"
             onClick={handleCheckout}
             disabled={isSubmitting}
             style={{
@@ -911,7 +939,7 @@ export default function App() {
               height: '46px', 
               borderRadius: '50%', 
               background: '#FFFFFF', 
-              border: '2px solid #D6E5BA', 
+              border: '2.5px solid #D6E5BA', 
               overflow: 'hidden', 
               display: 'flex', 
               alignItems: 'center', 
@@ -942,6 +970,7 @@ export default function App() {
           {/* Navigation Actions */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <button
+              id="nav-store-btn"
               onClick={() => setActiveTab('store')}
               style={{
                 background: activeTab === 'store' ? '#FFFFFF' : 'transparent',
@@ -961,6 +990,7 @@ export default function App() {
             {customerUser ? (
               <div style={{ display: 'flex', alignItems: 'center', background: '#D6E5BA', borderRadius: '8px', padding: '2px 4px' }}>
                 <button
+                  id="nav-customer-profile-btn"
                   onClick={() => setActiveTab('track')}
                   style={{
                     background: 'transparent',
@@ -978,6 +1008,7 @@ export default function App() {
                   👤 {customerUser.name} ({customerUser.phone})
                 </button>
                 <button
+                  id="nav-customer-logout-btn"
                   onClick={handleCustomerLogout}
                   title="Switch / Logout"
                   style={{
@@ -994,6 +1025,7 @@ export default function App() {
               </div>
             ) : (
               <button
+                id="nav-customer-login-btn"
                 onClick={() => setShowCustomerLoginModal(true)}
                 style={{
                   background: activeTab === 'track' ? '#FFFFFF' : 'rgba(255,255,255,0.15)',
@@ -1013,6 +1045,7 @@ export default function App() {
             {/* Staff OMS Login Button */}
             {isAdminLoggedIn ? (
               <button
+                id="nav-staff-dashboard-btn"
                 onClick={() => setActiveTab('admin')}
                 style={{
                   background: activeTab === 'admin' ? '#D6E5BA' : 'rgba(214, 229, 186, 0.3)',
@@ -1029,6 +1062,7 @@ export default function App() {
               </button>
             ) : (
               <button
+                id="nav-staff-login-btn"
                 onClick={() => setShowLoginModal(true)}
                 style={{
                   background: 'transparent',
@@ -1258,12 +1292,14 @@ export default function App() {
 
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button
+                      id="track-place-order-btn"
                       onClick={() => setActiveTab('store')}
                       style={{ background: '#187A90', color: '#fff', border: 'none', padding: '9px 16px', borderRadius: '8px', fontWeight: '700', fontSize: '0.85rem', cursor: 'pointer' }}
                     >
                       + Place New Order
                     </button>
                     <button
+                      id="track-switch-user-btn"
                       onClick={handleCustomerLogout}
                       style={{ background: '#F1F5F9', border: '1px solid #CBD5E1', padding: '9px 14px', borderRadius: '8px', fontWeight: '700', fontSize: '0.85rem', color: '#475569', cursor: 'pointer' }}
                     >
@@ -1430,6 +1466,7 @@ export default function App() {
                       10-DIGIT MOBILE NUMBER (PRIMARY ID) *
                     </label>
                     <input
+                      id="customer-login-phone-input"
                       type="tel"
                       placeholder="e.g. 9343207515 or 9686412342"
                       value={loginPhoneInput}
@@ -1444,6 +1481,7 @@ export default function App() {
                       YOUR NAME (OPTIONAL IF RETURNING CUSTOMER)
                     </label>
                     <input
+                      id="customer-login-name-input"
                       type="text"
                       placeholder="Automatically recognized from phone"
                       value={loginNameInput}
@@ -1456,6 +1494,7 @@ export default function App() {
                   </div>
 
                   <button
+                    id="customer-login-submit-btn"
                     type="submit"
                     style={{ width: '100%', background: '#187A90', color: '#fff', border: 'none', padding: '13px', borderRadius: '8px', fontWeight: '800', fontSize: '1rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(24, 122, 144, 0.3)' }}
                   >
@@ -1485,6 +1524,7 @@ export default function App() {
 
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <input
+                  id="staff-search-input"
                   type="text"
                   placeholder="Search by Phone / Name / Order ID..."
                   value={searchQuery}
@@ -1493,6 +1533,7 @@ export default function App() {
                 />
                 
                 <button
+                  id="staff-sync-btn"
                   onClick={handleResetToMaster}
                   title="Reload Master Orders from Sheet"
                   style={{ background: '#E0F2FE', color: '#0369A1', border: '1px solid #BAE6FD', padding: '9px 12px', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer' }}
@@ -1501,6 +1542,7 @@ export default function App() {
                 </button>
 
                 <button
+                  id="staff-logout-btn"
                   onClick={() => setIsAdminLoggedIn(false)}
                   style={{ background: '#F1F5F9', border: '1px solid #CBD5E1', padding: '9px 14px', borderRadius: '8px', fontWeight: '700', fontSize: '0.85rem', cursor: 'pointer' }}
                 >
@@ -1714,6 +1756,7 @@ export default function App() {
                   10-DIGIT MOBILE NUMBER *
                 </label>
                 <input
+                  id="modal-customer-phone-input"
                   type="tel"
                   placeholder="e.g. 9343207515"
                   value={loginPhoneInput}
@@ -1728,6 +1771,7 @@ export default function App() {
                   NAME (OPTIONAL)
                 </label>
                 <input
+                  id="modal-customer-name-input"
                   type="text"
                   placeholder="Auto-recognized if returning"
                   value={loginNameInput}
@@ -1738,12 +1782,14 @@ export default function App() {
 
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button
+                  id="modal-customer-submit-btn"
                   type="submit"
                   style={{ flex: 1, background: '#187A90', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
                 >
                   Sign In
                 </button>
                 <button
+                  id="modal-customer-cancel-btn"
                   type="button"
                   onClick={() => setShowCustomerLoginModal(false)}
                   style={{ background: '#F1F5F9', border: 'none', padding: '12px 16px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
@@ -1842,6 +1888,7 @@ export default function App() {
 
             <form onSubmit={handleAdminLogin}>
               <input
+                id="staff-pin-input"
                 type="password"
                 placeholder="Staff PIN (1234)"
                 value={adminPinInput}
@@ -1852,12 +1899,14 @@ export default function App() {
               />
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button
+                  id="staff-pin-submit-btn"
                   type="submit"
                   style={{ flex: 1, background: '#0F5869', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
                 >
                   Verify PIN
                 </button>
                 <button
+                  id="staff-pin-cancel-btn"
                   type="button"
                   onClick={() => setShowLoginModal(false)}
                   style={{ background: '#F1F5F9', border: 'none', padding: '12px 16px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
