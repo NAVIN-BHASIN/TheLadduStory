@@ -11,19 +11,208 @@ const FORM_ENTRIES = {
   ITEMS: 'entry.1014432505'
 };
 
-// OFFICIAL 11 FLYER ITEMS ONLY
+// OFFICIAL 11 FLYER ITEMS WITH HIGH-RES PRODUCT IMAGES (MATCHING SKU)
 const PRODUCTS = [
-  { id: '01', sku: 'RAGI-WALNUT', name: 'Ragi Walnut Laddu', category: 'LADDU', ratePerKg: 1200, p500: 600, p1k: 1200, opt1: '500g (₹600)', opt2: '1 Kg (₹1,200)', w1: '500g', w2: '1 Kg', tag: 'Superfood Millet', desc: 'Finger Millet (Ragi), Walnuts, Pure Cow Ghee, Unrefined Jaggery', benefit: 'Rich in Calcium & Omega-3, Diabetic-friendly, Zero White Sugar', isMunchy: false },
-  { id: '02', sku: 'TILL-BLACK-SESAME', name: 'Till Laddu (Black Sesame)', category: 'LADDU', ratePerKg: 1000, p500: 500, p1k: 1000, opt1: '500g (₹500)', opt2: '1 Kg (₹1,000)', w1: '500g', w2: '1 Kg', tag: 'Ayurvedic Warmth', desc: 'Organic Black Sesame (Till), Pure Desi Cow Ghee, Unrefined Jaggery', benefit: 'High Iron & Bone Density Support, Warming Ayurvedic Formulation', isMunchy: false },
-  { id: '03', sku: 'SATTU-ALMOND', name: 'Sattu Almond Laddu', category: 'LADDU', ratePerKg: 1100, p500: 550, p1k: 1100, opt1: '500g (₹550)', opt2: '1 Kg (₹1,100)', w1: '500g', w2: '1 Kg', tag: 'High Protein', desc: 'Roasted Chana Sattu, California Almonds, Desi Ghee, Jaggery', benefit: 'Natural Plant Protein & Sustained Energy, Muscle Recovery', isMunchy: false },
-  { id: '04', sku: 'GROUNDNUT', name: 'Groundnut Laddu', category: 'LADDU', ratePerKg: 800, p500: 400, p1k: 800, opt1: '500g (₹400)', opt2: '1 Kg (₹800)', w1: '500g', w2: '1 Kg', tag: 'Traditional Classic', desc: 'Roasted Peanuts (Groundnuts), Pure Cow Ghee, Organic Jaggery', benefit: 'Heart-healthy fats, High satiety, Wholesome traditional snacking', isMunchy: false },
-  { id: '05', sku: 'QUINOA-MOONG-DAL', name: 'Quinoa Moong Dal Laddu', category: 'LADDU', ratePerKg: 1250, p500: 625, p1k: 1250, opt1: '500g (₹625)', opt2: '1 Kg (₹1,250)', w1: '500g', w2: '1 Kg', tag: 'Ancient Superfood', desc: 'Organic Quinoa, Yellow Moong Dal, Pure Cow Ghee, Jaggery Powder', benefit: 'Complete Amino Acid Profile, Easy Digestion, Low Glycemic Index', isMunchy: false },
-  { id: '06', sku: 'METHI-FENUGREEK', name: 'Methi (fenugreek) Laddu', category: 'LADDU', ratePerKg: 1250, p500: 625, p1k: 1250, opt1: '500g (₹625)', opt2: '1 Kg (₹1,250)', w1: '500g', w2: '1 Kg', tag: 'Joint Health', desc: 'Fenugreek Seeds, Wheat Flour, Gond, Dry Fruits, Ghee, Jaggery', benefit: 'Relieves Joint Stiffness, Balances Vata, Enhances Digestion', isMunchy: false },
-  { id: '07', sku: 'DATES-DRY-FRUITS', name: 'Dates & Dry Fruits Bites', category: 'LADDU', ratePerKg: 1900, p500: 950, p1k: 1900, opt1: '500g (₹950)', opt2: '1 Kg (₹1,900)', w1: '500g', w2: '1 Kg', tag: 'Zero Added Sweetener', desc: 'Medjool Dates, Almonds, Pistachios, Cashews, Walnuts, Cow Ghee', benefit: 'Sweetened purely with Dates, Instant Stamina & Antioxidants', isMunchy: false },
-  { id: '08', sku: 'POST-DELIVERY-PANJEERI', name: 'Post Delivery Panjeeri / Laddu', category: 'LADDU', ratePerKg: 1800, p500: 900, p1k: 1800, opt1: '500g (₹900)', opt2: '1 Kg (₹1,800)', w1: '500g', w2: '1 Kg', tag: 'Postpartum Care', desc: 'Kamarkas, Gond, Dry Fruits, Ayurvedic Herbs, Cow Ghee, Jaggery', benefit: 'Traditional Postpartum Recovery, Strengthens Spine & Lactation', isMunchy: false },
-  { id: '09', sku: 'JAWAR-PANJEERI', name: 'Jawar Panjeeri / Laddu', category: 'LADDU', ratePerKg: 1900, p500: 950, p1k: 1900, opt1: '500g (₹950)', opt2: '1 Kg (₹1,900)', w1: '500g', w2: '1 Kg', tag: 'Gluten-Free Millet', desc: 'Sorghum (Jawar), Assorted Dry Fruits, Gond, Pure Cow Ghee, Jaggery', benefit: 'Rich in Fiber & Micronutrients, Cooling & Gut-healthy superfood', isMunchy: false },
-  { id: '10', sku: 'SAVORY-MAKHANA', name: 'Savory Munchies (Roasted Makhana)', subname: 'Roasted Makhana (₹275/100g)', category: 'SAVORY', ratePerKg: 2750, p500: 275, p1k: 550, opt1: '100g (₹275)', opt2: '200g (₹550)', w1: '100g', w2: '200g', tag: 'Guilt-Free Crunch', desc: 'Fox Nuts (Phool Makhana), Roasted in Pure Cow Ghee, Rock Salt', benefit: 'Zero Cholesterol, Low Calorie, High Potassium & Magnesium', isMunchy: true },
-  { id: '11', sku: 'SAVORY-MURMURA', name: 'Savory Munchies (Millet Mudi Mix)', subname: 'Millet Mudi Mix (₹200/200g)', category: 'SAVORY', ratePerKg: 1000, p500: 200, p1k: 400, opt1: '200g (₹200)', opt2: '400g (₹400)', w1: '200g', w2: '400g', tag: 'Tea-Time Crunch', desc: 'Puffed Millets, Roasted Peanuts, Curry Leaves, Cold-pressed Oil', benefit: 'Light on Stomach, 100% Roasted, Ancient Grain Healthy Alternative', isMunchy: true }
+  { 
+    id: '01', 
+    sku: 'RAGI-WALNUT', 
+    name: 'Ragi Walnut Laddu', 
+    category: 'LADDU', 
+    ratePerKg: 1200, 
+    p500: 600, 
+    p1k: 1200, 
+    opt1: '500g (₹600)', 
+    opt2: '1 Kg (₹1,200)', 
+    w1: '500g', 
+    w2: '1 Kg', 
+    tag: 'Superfood Millet', 
+    desc: 'Finger Millet (Ragi), Walnuts, Pure Cow Ghee, Unrefined Jaggery', 
+    benefit: 'Rich in Calcium & Omega-3, Diabetic-friendly, Zero White Sugar', 
+    image: 'images/products/RAGI-WALNUT.jpg',
+    isMunchy: false 
+  },
+  { 
+    id: '02', 
+    sku: 'TILL-BLACK-SESAME', 
+    name: 'Till Laddu (Black Sesame)', 
+    category: 'LADDU', 
+    ratePerKg: 1000, 
+    p500: 500, 
+    p1k: 1000, 
+    opt1: '500g (₹500)', 
+    opt2: '1 Kg (₹1,000)', 
+    w1: '500g', 
+    w2: '1 Kg', 
+    tag: 'Ayurvedic Warmth', 
+    desc: 'Organic Black Sesame (Till), Pure Desi Cow Ghee, Unrefined Jaggery', 
+    benefit: 'High Iron & Bone Density Support, Warming Ayurvedic Formulation', 
+    image: 'images/products/TILL-BLACK-SESAME.jpg',
+    isMunchy: false 
+  },
+  { 
+    id: '03', 
+    sku: 'SATTU-ALMOND', 
+    name: 'Sattu Almond Laddu', 
+    category: 'LADDU', 
+    ratePerKg: 1100, 
+    p500: 550, 
+    p1k: 1100, 
+    opt1: '500g (₹550)', 
+    opt2: '1 Kg (₹1,100)', 
+    w1: '500g', 
+    w2: '1 Kg', 
+    tag: 'High Protein', 
+    desc: 'Roasted Chana Sattu, California Almonds, Desi Ghee, Jaggery', 
+    benefit: 'Natural Plant Protein & Sustained Energy, Muscle Recovery', 
+    image: 'images/products/SATTU-ALMOND.jpg',
+    isMunchy: false 
+  },
+  { 
+    id: '04', 
+    sku: 'GROUNDNUT', 
+    name: 'Groundnut Laddu', 
+    category: 'LADDU', 
+    ratePerKg: 800, 
+    p500: 400, 
+    p1k: 800, 
+    opt1: '500g (₹400)', 
+    opt2: '1 Kg (₹800)', 
+    w1: '500g', 
+    w2: '1 Kg', 
+    tag: 'Traditional Classic', 
+    desc: 'Roasted Peanuts (Groundnuts), Pure Cow Ghee, Organic Jaggery', 
+    benefit: 'Heart-healthy fats, High satiety, Wholesome traditional snacking', 
+    image: 'images/products/GROUNDNUT.jpg',
+    isMunchy: false 
+  },
+  { 
+    id: '05', 
+    sku: 'QUINOA-MOONG-DAL', 
+    name: 'Quinoa Moong Dal Laddu', 
+    category: 'LADDU', 
+    ratePerKg: 1250, 
+    p500: 625, 
+    p1k: 1250, 
+    opt1: '500g (₹625)', 
+    opt2: '1 Kg (₹1,250)', 
+    w1: '500g', 
+    w2: '1 Kg', 
+    tag: 'Ancient Superfood', 
+    desc: 'Organic Quinoa, Yellow Moong Dal, Pure Cow Ghee, Jaggery Powder', 
+    benefit: 'Complete Amino Acid Profile, Easy Digestion, Low Glycemic Index', 
+    image: 'images/products/QUINOA-MOONG-DAL.jpg',
+    isMunchy: false 
+  },
+  { 
+    id: '06', 
+    sku: 'METHI-FENUGREEK', 
+    name: 'Methi (fenugreek) Laddu', 
+    category: 'LADDU', 
+    ratePerKg: 1250, 
+    p500: 625, 
+    p1k: 1250, 
+    opt1: '500g (₹625)', 
+    opt2: '1 Kg (₹1,250)', 
+    w1: '500g', 
+    w2: '1 Kg', 
+    tag: 'Joint Health', 
+    desc: 'Fenugreek Seeds, Wheat Flour, Gond, Dry Fruits, Ghee, Jaggery', 
+    benefit: 'Relieves Joint Stiffness, Balances Vata, Enhances Digestion', 
+    image: 'images/products/METHI-FENUGREEK.jpg',
+    isMunchy: false 
+  },
+  { 
+    id: '07', 
+    sku: 'DATES-DRY-FRUITS', 
+    name: 'Dates & Dry Fruits Bites', 
+    category: 'LADDU', 
+    ratePerKg: 1900, 
+    p500: 950, 
+    p1k: 1900, 
+    opt1: '500g (₹950)', 
+    opt2: '1 Kg (₹1,900)', 
+    w1: '500g', 
+    w2: '1 Kg', 
+    tag: 'Zero Added Sweetener', 
+    desc: 'Medjool Dates, Almonds, Pistachios, Cashews, Walnuts, Cow Ghee', 
+    benefit: 'Sweetened purely with Dates, Instant Stamina & Antioxidants', 
+    image: 'images/products/DATES-DRY-FRUITS.jpg',
+    isMunchy: false 
+  },
+  { 
+    id: '08', 
+    sku: 'POST-DELIVERY-PANJEERI', 
+    name: 'Post Delivery Panjeeri / Laddu', 
+    category: 'LADDU', 
+    ratePerKg: 1800, 
+    p500: 900, 
+    p1k: 1800, 
+    opt1: '500g (₹900)', 
+    opt2: '1 Kg (₹1,800)', 
+    w1: '500g', 
+    w2: '1 Kg', 
+    tag: 'Postpartum Care', 
+    desc: 'Kamarkas, Gond, Dry Fruits, Ayurvedic Herbs, Cow Ghee, Jaggery', 
+    benefit: 'Traditional Postpartum Recovery, Strengthens Spine & Lactation', 
+    image: 'images/products/POST-DELIVERY-PANJEERI.jpg',
+    isMunchy: false 
+  },
+  { 
+    id: '09', 
+    sku: 'JAWAR-PANJEERI', 
+    name: 'Jawar Panjeeri / Laddu', 
+    category: 'LADDU', 
+    ratePerKg: 1900, 
+    p500: 950, 
+    p1k: 1900, 
+    opt1: '500g (₹950)', 
+    opt2: '1 Kg (₹1,900)', 
+    w1: '500g', 
+    w2: '1 Kg', 
+    tag: 'Gluten-Free Millet', 
+    desc: 'Sorghum (Jawar), Assorted Dry Fruits, Gond, Pure Cow Ghee, Jaggery', 
+    benefit: 'Rich in Fiber & Micronutrients, Cooling & Gut-healthy superfood', 
+    image: 'images/products/JAWAR-PANJEERI.jpg',
+    isMunchy: false 
+  },
+  { 
+    id: '10', 
+    sku: 'SAVORY-MAKHANA', 
+    name: 'Savory Munchies (Roasted Makhana)', 
+    subname: 'Roasted Makhana (₹275/100g)', 
+    category: 'SAVORY', 
+    ratePerKg: 2750, 
+    p500: 275, 
+    p1k: 550, 
+    opt1: '100g (₹275)', 
+    opt2: '200g (₹550)', 
+    w1: '100g', 
+    w2: '200g', 
+    tag: 'Guilt-Free Crunch', 
+    desc: 'Fox Nuts (Phool Makhana), Roasted in Pure Cow Ghee, Rock Salt', 
+    benefit: 'Zero Cholesterol, Low Calorie, High Potassium & Magnesium', 
+    image: 'images/products/SAVORY-MAKHANA.jpg',
+    isMunchy: true 
+  },
+  { 
+    id: '11', 
+    sku: 'SAVORY-MURMURA', 
+    name: 'Savory Munchies (Millet Mudi Mix)', 
+    subname: 'Millet Mudi Mix (₹200/200g)', 
+    category: 'SAVORY', 
+    ratePerKg: 1000, 
+    p500: 200, 
+    p1k: 400, 
+    opt1: '200g (₹200)', 
+    opt2: '400g (₹400)', 
+    w1: '200g', 
+    w2: '400g', 
+    tag: 'Tea-Time Crunch', 
+    desc: 'Puffed Millets, Roasted Peanuts, Curry Leaves, Cold-pressed Oil', 
+    benefit: 'Light on Stomach, 100% Roasted, Ancient Grain Healthy Alternative', 
+    image: 'images/products/SAVORY-MURMURA.jpg',
+    isMunchy: true 
+  }
 ];
 
 export default function App() {
@@ -96,7 +285,6 @@ export default function App() {
       return;
     }
 
-    // Look up previous name & address from orders if available
     const prevOrder = orders.find(o => o.phone.replace(/\D/g, '').slice(-10) === clean);
     const resolvedName = loginNameInput.trim() || (prevOrder ? prevOrder.name : 'Valued Customer');
     const resolvedAddr = loginAddressInput.trim() || (prevOrder ? prevOrder.address : '');
@@ -140,6 +328,7 @@ export default function App() {
         packLabel, 
         cleanWeight, 
         unitPrice, 
+        image: product.image,
         qty: 1 
       }]);
     }
@@ -236,7 +425,6 @@ export default function App() {
       notes: 'Headless Form Direct Sync'
     };
 
-    // Auto-save customer profile with phone as ID
     const updatedProfile = {
       phone: cleanPhone,
       name: custName,
@@ -246,13 +434,9 @@ export default function App() {
     setCustomerUser(updatedProfile);
     localStorage.setItem('tls_active_customer', JSON.stringify(updatedProfile));
 
-    // Submit single form
     submitToGoogleSheets(newOrder);
-
-    // Save in local state
     setOrders(prev => [newOrder, ...prev]);
 
-    // Generate UPI QR Code
     const upiLink = `upi://pay?pa=9343207515@okbizaxis&pn=The%20Laddu%20Story&am=${cartTotal}&cu=INR&tn=Order%20${orderId}`;
     try {
       const url = await QRCode.toDataURL(upiLink, { width: 280, margin: 2, color: { dark: '#0F5869', light: '#FFFFFF' } });
@@ -265,7 +449,6 @@ export default function App() {
     setIsSubmitting(false);
   };
 
-  // Admin PIN Login
   const handleAdminLogin = (e) => {
     e.preventDefault();
     if (adminPinInput === '1234') {
@@ -281,7 +464,6 @@ export default function App() {
     setOrders(orders.map(o => o.orderId === orderId ? { ...o, status: newStatus } : o));
   };
 
-  // Re-order past order in 1 click
   const reorderPastItems = (pastOrder) => {
     const newCart = [...cart];
     pastOrder.items.forEach(it => {
@@ -297,7 +479,6 @@ export default function App() {
     setIsMobileCartOpen(true);
   };
 
-  // Filter orders for active logged-in customer
   const currentCustomerOrders = customerUser
     ? orders.filter(o => o.phone.replace(/\D/g, '').slice(-10) === customerUser.phone)
     : [];
@@ -305,7 +486,6 @@ export default function App() {
   const openOrders = currentCustomerOrders.filter(o => o.status !== 'DELIVERED' && o.status !== 'CANCELLED');
   const pastOrders = currentCustomerOrders.filter(o => o.status === 'DELIVERED');
 
-  // Status Stepper Helper
   const getStatusStepIndex = (status) => {
     switch (status) {
       case 'RECEIVED': return 0;
@@ -351,9 +531,17 @@ export default function App() {
           <div style={{ maxHeight: isModal ? '280px' : '220px', overflowY: 'auto', marginBottom: '16px', paddingRight: '4px' }}>
             {cart.map(item => (
               <div key={item.cartKey} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px dashed #E2E8F0' }}>
-                <div style={{ maxWidth: '60%' }}>
-                  <div style={{ fontWeight: '700', fontSize: '0.88rem', color: '#0F172A' }}>{item.name}</div>
-                  <div style={{ fontSize: '0.75rem', color: '#187A90', fontWeight: '700' }}>Pack: {item.cleanWeight}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', maxWidth: '65%' }}>
+                  <img
+                    src={item.image}
+                    alt={item.name}
+                    onError={(e) => { e.target.style.display = 'none'; }}
+                    style={{ width: '42px', height: '42px', borderRadius: '8px', objectFit: 'cover', border: '1px solid #E2E8F0', flexShrink: 0 }}
+                  />
+                  <div>
+                    <div style={{ fontWeight: '700', fontSize: '0.86rem', color: '#0F172A', lineHeight: 1.2 }}>{item.name}</div>
+                    <div style={{ fontSize: '0.74rem', color: '#187A90', fontWeight: '700', marginTop: '2px' }}>Pack: {item.cleanWeight}</div>
+                  </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #CBD5E1', borderRadius: '6px', background: '#F8FAFC' }}>
@@ -367,7 +555,7 @@ export default function App() {
             ))}
           </div>
 
-          {/* Customer Inputs (Auto-filled with Primary Phone ID) */}
+          {/* Customer Inputs */}
           <div style={{ background: '#F8FAFC', padding: '14px', borderRadius: '12px', marginBottom: '16px', border: '1px solid #E2E8F0' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
               <span style={{ fontSize: '0.8rem', fontWeight: '800', color: '#475569' }}>
@@ -597,28 +785,28 @@ export default function App() {
       <main style={{ maxWidth: '1400px', margin: '0 auto', padding: '24px 20px' }}>
 
         {/* ------------------------------------------------------------- */}
-        {/* VIEW 1: CUSTOMER STOREFRONT (RESPONSIVE NO-OVERLAP DESIGN)    */}
+        {/* VIEW 1: CUSTOMER STOREFRONT WITH HIGH-RES PRODUCT IMAGES      */}
         {/* ------------------------------------------------------------- */}
         {activeTab === 'store' && (
           <div style={{ display: 'flex', gap: '30px', alignItems: 'flex-start' }}>
             
             {/* Catalog Grid */}
             <div style={{ flex: '1 1 0%', minWidth: 0, width: '100%' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
                 <div>
-                  <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#0F5869', margin: '0 0 4px' }}>
+                  <h2 style={{ fontSize: '1.45rem', fontWeight: '800', color: '#0F5869', margin: '0 0 4px' }}>
                     Artisanal Superfood Catalog (11 Items)
                   </h2>
                   <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748B' }}>
-                    Authentic rates and ingredients from the official brochure.
+                    Freshly hand-rolled in pure cow ghee and unrefined jaggery powder.
                   </p>
                 </div>
-                <span style={{ background: '#D6E5BA', color: '#2D4A1D', padding: '6px 14px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: '800' }}>
+                <span style={{ background: '#D6E5BA', color: '#2D4A1D', padding: '6px 14px', borderRadius: '8px', fontSize: '0.82rem', fontWeight: '800' }}>
                   Laddus: MOQ 500g
                 </span>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))', gap: '22px' }}>
                 {PRODUCTS.map(prod => {
                   const choice = getWeight(prod.sku);
                   const price = choice === 'OPT1' ? prod.p500 : prod.p1k;
@@ -626,98 +814,126 @@ export default function App() {
                   return (
                     <div
                       key={prod.sku}
+                      className="product-card"
                       style={{
-                        background: prod.isMunchy ? '#F6FAEF' : '#FFFFFF',
+                        background: '#FFFFFF',
                         border: prod.isMunchy ? '2px solid #CBE0A6' : '1px solid #E2E8F0',
-                        borderRadius: '16px',
-                        padding: '18px',
+                        borderRadius: '20px',
+                        overflow: 'hidden',
                         display: 'flex',
                         flexDirection: 'column',
                         justifyContent: 'space-between',
-                        boxShadow: '0 4px 12px rgba(24, 122, 144, 0.05)'
+                        boxShadow: '0 6px 20px rgba(0,0,0,0.04)',
+                        transition: 'transform 0.25s ease, box-shadow 0.25s ease'
                       }}
                     >
-                      <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                          <span style={{ fontSize: '0.72rem', fontWeight: '800', background: prod.isMunchy ? '#D6E5BA' : '#E0F2FE', color: prod.isMunchy ? '#2D4A1D' : '#0369A1', padding: '3px 8px', borderRadius: '6px' }}>
+                      {/* Product Image Banner */}
+                      <div style={{ position: 'relative', width: '100%', height: '210px', background: '#F8FAFC', overflow: 'hidden' }}>
+                        <img
+                          src={prod.image}
+                          alt={prod.name}
+                          loading="lazy"
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                            e.target.parentElement.classList.add('img-fallback');
+                          }}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            display: 'block',
+                            transition: 'transform 0.4s ease'
+                          }}
+                        />
+
+                        {/* Top Badges */}
+                        <div style={{ position: 'absolute', top: '12px', left: '12px', right: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.72rem', fontWeight: '800', background: 'rgba(255,255,255,0.95)', color: prod.isMunchy ? '#2D4A1D' : '#0F5869', padding: '4px 10px', borderRadius: '8px', boxShadow: '0 2px 6px rgba(0,0,0,0.1)' }}>
                             #{prod.id} {prod.tag}
                           </span>
-                          <span style={{ fontSize: '0.85rem', fontWeight: '800', color: '#187A90' }}>
+                          <span style={{ fontSize: '0.78rem', fontWeight: '800', background: '#0F5869', color: '#FFFFFF', padding: '4px 10px', borderRadius: '8px', boxShadow: '0 2px 6px rgba(0,0,0,0.15)' }}>
                             ₹{prod.ratePerKg.toLocaleString('en-IN')}/Kg
                           </span>
                         </div>
-
-                        <h3 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#0F172A', margin: '0 0 6px' }}>
-                          {prod.name}
-                        </h3>
-
-                        <div style={{ fontSize: '0.8rem', color: '#475569', marginBottom: '8px', lineHeight: 1.4 }}>
-                          <b>Ingredients:</b> {prod.desc}
-                        </div>
-
-                        <div style={{ fontSize: '0.78rem', color: '#059669', fontWeight: '600', marginBottom: '14px', background: '#ECFDF5', padding: '6px 8px', borderRadius: '6px' }}>
-                          ✨ {prod.benefit}
-                        </div>
                       </div>
 
-                      <div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
-                          <button
-                            onClick={() => setWeight(prod.sku, 'OPT1')}
-                            style={{
-                              padding: '8px 4px',
-                              borderRadius: '8px',
-                              border: choice === 'OPT1' ? '2px solid #187A90' : '1px solid #CBD5E1',
-                              background: choice === 'OPT1' ? '#187A90' : '#F8FAFC',
-                              color: choice === 'OPT1' ? '#FFFFFF' : '#475569',
-                              fontWeight: '700',
-                              fontSize: '0.82rem',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            {prod.opt1}
-                          </button>
-                          <button
-                            onClick={() => setWeight(prod.sku, 'OPT2')}
-                            style={{
-                              padding: '8px 4px',
-                              borderRadius: '8px',
-                              border: choice === 'OPT2' ? '2px solid #187A90' : '1px solid #CBD5E1',
-                              background: choice === 'OPT2' ? '#187A90' : '#F8FAFC',
-                              color: choice === 'OPT2' ? '#FFFFFF' : '#475569',
-                              fontWeight: '700',
-                              fontSize: '0.82rem',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            {prod.opt2}
-                          </button>
+                      {/* Product Content Body */}
+                      <div style={{ padding: '18px 20px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                        <div>
+                          <h3 style={{ fontSize: '1.15rem', fontWeight: '800', color: '#0F172A', margin: '0 0 6px', letterSpacing: '-0.3px' }}>
+                            {prod.name}
+                          </h3>
+
+                          <div style={{ fontSize: '0.8rem', color: '#475569', marginBottom: '8px', lineHeight: 1.4 }}>
+                            <b style={{ color: '#0F172A' }}>Ingredients:</b> {prod.desc}
+                          </div>
+
+                          <div style={{ fontSize: '0.78rem', color: '#047857', fontWeight: '600', marginBottom: '14px', background: '#ECFDF5', padding: '6px 10px', borderRadius: '8px' }}>
+                            ✨ {prod.benefit}
+                          </div>
                         </div>
 
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div>
-                            <span style={{ fontSize: '0.72rem', color: '#64748B' }}>Payable:</span>
-                            <div style={{ fontSize: '1.15rem', fontWeight: '800', color: '#0F5869' }}>
-                              ₹{price}
-                            </div>
+                        {/* Weight Selection & Add to Cart */}
+                        <div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '14px' }}>
+                            <button
+                              onClick={() => setWeight(prod.sku, 'OPT1')}
+                              style={{
+                                padding: '9px 6px',
+                                borderRadius: '8px',
+                                border: choice === 'OPT1' ? '2px solid #187A90' : '1px solid #CBD5E1',
+                                background: choice === 'OPT1' ? '#187A90' : '#F8FAFC',
+                                color: choice === 'OPT1' ? '#FFFFFF' : '#475569',
+                                fontWeight: '700',
+                                fontSize: '0.82rem',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {prod.opt1}
+                            </button>
+                            <button
+                              onClick={() => setWeight(prod.sku, 'OPT2')}
+                              style={{
+                                padding: '9px 6px',
+                                borderRadius: '8px',
+                                border: choice === 'OPT2' ? '2px solid #187A90' : '1px solid #CBD5E1',
+                                background: choice === 'OPT2' ? '#187A90' : '#F8FAFC',
+                                color: choice === 'OPT2' ? '#FFFFFF' : '#475569',
+                                fontWeight: '700',
+                                fontSize: '0.82rem',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {prod.opt2}
+                            </button>
                           </div>
-                          <button
-                            onClick={() => addToCart(prod)}
-                            style={{
-                              background: '#187A90',
-                              color: '#fff',
-                              border: 'none',
-                              padding: '10px 16px',
-                              borderRadius: '8px',
-                              fontWeight: '700',
-                              fontSize: '0.85rem',
-                              cursor: 'pointer',
-                              boxShadow: '0 2px 6px rgba(24, 122, 144, 0.3)'
-                            }}
-                          >
-                            + Add to Cart
-                          </button>
+
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                              <span style={{ fontSize: '0.72rem', color: '#64748B' }}>Payable:</span>
+                              <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0F5869' }}>
+                                ₹{price.toLocaleString('en-IN')}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => addToCart(prod)}
+                              style={{
+                                background: '#187A90',
+                                color: '#fff',
+                                border: 'none',
+                                padding: '11px 18px',
+                                borderRadius: '10px',
+                                fontWeight: '700',
+                                fontSize: '0.88rem',
+                                cursor: 'pointer',
+                                boxShadow: '0 4px 10px rgba(24, 122, 144, 0.3)'
+                              }}
+                            >
+                              + Add to Cart
+                            </button>
+                          </div>
                         </div>
+
                       </div>
 
                     </div>
@@ -1220,7 +1436,7 @@ export default function App() {
                 rel="noreferrer"
                 style={{ flex: 1, background: '#25D366', color: '#fff', textDecoration: 'none', padding: '12px', borderRadius: '10px', fontWeight: '800', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
               >
-                💬 WhatsApp Confirmation
+                💬 WhatsApp Bakery
               </a>
               <button
                 onClick={() => setOrderSuccess(null)}
@@ -1276,6 +1492,25 @@ export default function App() {
 
       {/* RESPONSIVE CSS INJECTION */}
       <style>{`
+        .product-card:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 12px 28px rgba(15, 88, 105, 0.12) !important;
+        }
+        .product-card:hover img {
+          transform: scale(1.05);
+        }
+        .img-fallback {
+          background: linear-gradient(135deg, #FAF6F0 0%, #E8F4F7 100%) !important;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .img-fallback::after {
+          content: '🍯 The Laddu Story';
+          font-weight: 800;
+          color: #187A90;
+          font-size: 1.1rem;
+        }
         @media (max-width: 900px) {
           .desktop-cart-sidebar {
             display: none !important;
