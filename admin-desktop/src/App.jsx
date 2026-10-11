@@ -11,14 +11,18 @@ const FORM_ENTRIES = {
   ITEMS: 'entry.1014432505'
 };
 
-// OFFICIAL 11 FLYER ITEMS WITH HIGH-RES PRODUCT IMAGES (MATCHING SKU)
-const PRODUCTS = [
+// REAL-TIME CLOUD SYNC ENDPOINT (CROSS-DEVICE REAL-TIME BRIDGE FOR STAFF & CUSTOMERS)
+const CLOUD_SYNC_URL = 'https://api.restful-api.dev/objects/ff808181a09d98f701a1299ccf033a8f';
+
+// OFFICIAL 11 FLYER & OMS ITEMS (MATCHING EXACT SKUS & IMAGES FROM D:\The Laddu Story Application\images)
+const INITIAL_PRODUCTS = [
   { 
     id: '01', 
     sku: 'RAGI-WALNUT', 
     name: 'Ragi Walnut Laddu', 
     category: 'LADDU', 
     ratePerKg: 1200, 
+    moq: '500g',
     p500: 600, 
     p1k: 1200, 
     opt1: '500g (₹600)', 
@@ -26,9 +30,11 @@ const PRODUCTS = [
     w1: '500g', 
     w2: '1 Kg', 
     tag: 'Superfood Millet', 
-    desc: 'Finger Millet (Ragi), Walnuts, Pure Cow Ghee, Unrefined Jaggery', 
+    desc: 'Finger Millet (Ragi), Walnuts, Pure Desi Cow Ghee, Unrefined Jaggery', 
     benefit: 'Rich in Calcium & Omega-3, Diabetic-friendly, Zero White Sugar', 
     image: 'images/products/RAGI-WALNUT.jpg',
+    stockStatus: 'IN_STOCK',
+    stockCount: 50,
     isMunchy: false 
   },
   { 
@@ -37,6 +43,7 @@ const PRODUCTS = [
     name: 'Till Laddu (Black Sesame)', 
     category: 'LADDU', 
     ratePerKg: 1000, 
+    moq: '500g',
     p500: 500, 
     p1k: 1000, 
     opt1: '500g (₹500)', 
@@ -47,6 +54,8 @@ const PRODUCTS = [
     desc: 'Organic Black Sesame (Till), Pure Desi Cow Ghee, Unrefined Jaggery', 
     benefit: 'High Iron & Bone Density Support, Warming Ayurvedic Formulation', 
     image: 'images/products/TILL-BLACK-SESAME.jpg',
+    stockStatus: 'IN_STOCK',
+    stockCount: 50,
     isMunchy: false 
   },
   { 
@@ -55,6 +64,7 @@ const PRODUCTS = [
     name: 'Sattu Almond Laddu', 
     category: 'LADDU', 
     ratePerKg: 1100, 
+    moq: '500g',
     p500: 550, 
     p1k: 1100, 
     opt1: '500g (₹550)', 
@@ -65,6 +75,8 @@ const PRODUCTS = [
     desc: 'Roasted Chana Sattu, California Almonds, Desi Ghee, Jaggery', 
     benefit: 'Natural Plant Protein & Sustained Energy, Muscle Recovery', 
     image: 'images/products/SATTU-ALMOND.jpg',
+    stockStatus: 'IN_STOCK',
+    stockCount: 50,
     isMunchy: false 
   },
   { 
@@ -73,6 +85,7 @@ const PRODUCTS = [
     name: 'Groundnut Laddu', 
     category: 'LADDU', 
     ratePerKg: 800, 
+    moq: '500g',
     p500: 400, 
     p1k: 800, 
     opt1: '500g (₹400)', 
@@ -83,6 +96,8 @@ const PRODUCTS = [
     desc: 'Roasted Peanuts (Groundnuts), Pure Cow Ghee, Organic Jaggery', 
     benefit: 'Heart-healthy fats, High satiety, Wholesome traditional snacking', 
     image: 'images/products/GROUNDNUT.jpg',
+    stockStatus: 'IN_STOCK',
+    stockCount: 50,
     isMunchy: false 
   },
   { 
@@ -91,6 +106,7 @@ const PRODUCTS = [
     name: 'Quinoa Moong Dal Laddu', 
     category: 'LADDU', 
     ratePerKg: 1250, 
+    moq: '500g',
     p500: 625, 
     p1k: 1250, 
     opt1: '500g (₹625)', 
@@ -101,42 +117,50 @@ const PRODUCTS = [
     desc: 'Organic Quinoa, Yellow Moong Dal, Desi Ghee, Cardamom, Jaggery', 
     benefit: 'Complete Amino Acids, Light on Stomach & Easy Digestion', 
     image: 'images/products/QUINOA-MOONG-DAL.jpg',
+    stockStatus: 'IN_STOCK',
+    stockCount: 50,
     isMunchy: false 
   },
   { 
     id: '06', 
-    sku: 'METHI', 
-    name: 'Methi Laddu', 
+    sku: 'METHI-FENUGREEK', 
+    name: 'Methi (fenugreek) Laddu', 
     category: 'LADDU', 
-    ratePerKg: 1000, 
-    p500: 500, 
-    p1k: 1000, 
-    opt1: '500g (₹500)', 
-    opt2: '1 Kg (₹1,000)', 
+    ratePerKg: 1250, 
+    moq: '500g',
+    p500: 625, 
+    p1k: 1250, 
+    opt1: '500g (₹625)', 
+    opt2: '1 Kg (₹1,250)', 
     w1: '500g', 
     w2: '1 Kg', 
     tag: 'Joint Support', 
     desc: 'Sprouted Fenugreek (Methi), Dry Fruits, Desi Cow Ghee, Jaggery', 
     benefit: 'Ayurvedic Joint Care, Postpartum Strength, Low Glycemic', 
-    image: 'images/products/METHI.jpg',
+    image: 'images/products/METHI-FENUGREEK.jpg',
+    stockStatus: 'IN_STOCK',
+    stockCount: 50,
     isMunchy: false 
   },
   { 
     id: '07', 
-    sku: 'GOND', 
-    name: 'Gond Laddu (Edible Gum)', 
+    sku: 'DATES-DRY-FRUITS', 
+    name: 'Dates & Dry Fruits Bites', 
     category: 'LADDU', 
-    ratePerKg: 1300, 
-    p500: 650, 
-    p1k: 1300, 
-    opt1: '500g (₹650)', 
-    opt2: '1 Kg (₹1,300)', 
+    ratePerKg: 1900, 
+    moq: '500g',
+    p500: 950, 
+    p1k: 1900, 
+    opt1: '500g (₹950)', 
+    opt2: '1 Kg (₹1,900)', 
     w1: '500g', 
     w2: '1 Kg', 
-    tag: 'Immunity & Stamina', 
-    desc: 'Premium Gond (Edible Gum), Rich Dry Fruits, Desi Ghee, Jaggery', 
-    benefit: 'Deep winter warmth, Spine & Bone Strength, High Stamina', 
-    image: 'images/products/GOND.jpg',
+    tag: 'Natural Sweetness', 
+    desc: 'Medjool Dates, Almonds, Cashews, Pistachios, Pure Cow Ghee, Zero Sugar', 
+    benefit: '100% Naturally Sweetened with Dates, Instant Energy, Fiber Rich', 
+    image: 'images/products/DATES-DRY-FRUITS.jpg',
+    stockStatus: 'IN_STOCK',
+    stockCount: 50,
     isMunchy: false 
   },
   { 
@@ -145,6 +169,7 @@ const PRODUCTS = [
     name: 'Post Delivery Panjeeri / Laddu', 
     category: 'LADDU', 
     ratePerKg: 1800, 
+    moq: '500g',
     p500: 900, 
     p1k: 1800, 
     opt1: '500g (₹900)', 
@@ -155,14 +180,38 @@ const PRODUCTS = [
     desc: 'Ayurvedic Herbs, Kamarkas, Gond, Dry Fruits, A2 Desi Cow Ghee', 
     benefit: 'Maternal Healing, Lactation Support, Postpartum Recovery', 
     image: 'images/products/POST-DELIVERY-PANJEERI.jpg',
+    stockStatus: 'IN_STOCK',
+    stockCount: 50,
     isMunchy: false 
   },
   { 
     id: '09', 
+    sku: 'JAWAR-PANJEERI', 
+    name: 'Jawar Panjeeri / Laddu', 
+    category: 'LADDU', 
+    ratePerKg: 1900, 
+    moq: '500g',
+    p500: 950, 
+    p1k: 1900, 
+    opt1: '500g (₹950)', 
+    opt2: '1 Kg (₹1,900)', 
+    w1: '500g', 
+    w2: '1 Kg', 
+    tag: 'Ancient Sorghum Millet', 
+    desc: 'Roasted Jawar (Sorghum Flour), A2 Cow Ghee, Jaggery, Super Seeds & Nuts', 
+    benefit: 'Gluten-Free ancient grains, High fiber, Digestive health & stamina', 
+    image: 'images/products/JAWAR-PANJEERI.jpg',
+    stockStatus: 'IN_STOCK',
+    stockCount: 50,
+    isMunchy: false 
+  },
+  { 
+    id: '10', 
     sku: 'SAVORY-MAKHANA', 
     name: 'Savory Munchies (Roasted Makhana)', 
     category: 'SAVORY', 
     ratePerKg: 2750, 
+    moq: '100g',
     p500: 275, 
     p1k: 550, 
     opt1: '100g (₹275)', 
@@ -173,14 +222,17 @@ const PRODUCTS = [
     desc: 'Foxnuts (Makhana) slow roasted in pure cow ghee, Himalayan pink salt', 
     benefit: 'Zero Cholesterol, Low Calorie, Mineral Rich Super Crunch', 
     image: 'images/products/SAVORY-MAKHANA.jpg',
+    stockStatus: 'IN_STOCK',
+    stockCount: 50,
     isMunchy: true 
   },
   { 
-    id: '10', 
+    id: '11', 
     sku: 'SAVORY-MURMURA', 
     name: 'Savory Munchies (Millet Mudi Mix)', 
     category: 'SAVORY', 
     ratePerKg: 1000, 
+    moq: '200g',
     p500: 200, 
     p1k: 400, 
     opt1: '200g (₹200)', 
@@ -191,25 +243,9 @@ const PRODUCTS = [
     desc: 'Puffed Millets, Roasted Peanuts, Curry Leaves, Cold-pressed Spices', 
     benefit: 'Light & Crisp, Gut-friendly, Wholesome evening snack', 
     image: 'images/products/SAVORY-MURMURA.jpg',
+    stockStatus: 'IN_STOCK',
+    stockCount: 50,
     isMunchy: true 
-  },
-  { 
-    id: '11', 
-    sku: 'ASSORTED-FLYER-PACK', 
-    name: 'Flyer Special Assorted Laddu Box', 
-    category: 'ASSORTED', 
-    ratePerKg: 1200, 
-    p500: 600, 
-    p1k: 1200, 
-    opt1: '500g (₹600)', 
-    opt2: '1 Kg (₹1,200)', 
-    w1: '500g', 
-    w2: '1 Kg', 
-    tag: 'Taster Gift Box', 
-    desc: 'Selection of Ragi Walnut, Sattu Almond, Groundnut & Till Laddus', 
-    benefit: 'Ideal for gifting & family sampling of ancient healthy sweets', 
-    image: 'images/products/ASSORTED-FLYER-PACK.jpg',
-    isMunchy: false 
   }
 ];
 
@@ -409,11 +445,50 @@ const MASTER_OMS_ORDERS = [
 export default function App() {
   // Navigation & View State
   const [activeTab, setActiveTab] = useState('store'); // 'store' | 'track' | 'admin'
+  const [adminSection, setAdminSection] = useState('orders'); // 'orders' | 'inventory'
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
   const [adminPinInput, setAdminPinInput] = useState('');
   const [showLoginModal, setShowLoginModal] = useState(false);
 
-  // Customer Account Session (Auto-heals cached "Valued Customer" to actual real name from Master Registry)
+  // Cloud Sync State
+  const [isCloudSynced, setIsCloudSynced] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState(new Date().toLocaleTimeString());
+
+  // Products State (Managed dynamically via Admin Inventory)
+  const [products, setProducts] = useState(() => {
+    try {
+      const saved = localStorage.getItem('tls_products_db');
+      return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
+    } catch (e) {
+      return INITIAL_PRODUCTS;
+    }
+  });
+
+  // Inventory Editing Modals
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [showAddProductModal, setShowAddProductModal] = useState(false);
+  const [newProductForm, setNewProductForm] = useState({
+    sku: '',
+    name: '',
+    category: 'LADDU',
+    ratePerKg: 1200,
+    moq: '500g',
+    opt1: '500g (₹600)',
+    opt2: '1 Kg (₹1,200)',
+    p500: 600,
+    p1k: 1200,
+    w1: '500g',
+    w2: '1 Kg',
+    tag: 'Artisanal Special',
+    desc: 'Crafted with Desi Cow Ghee and Pure Jaggery',
+    benefit: 'Healthy and wholesome nutrition',
+    image: 'images/products/RAGI-WALNUT.jpg',
+    stockStatus: 'IN_STOCK',
+    stockCount: 50,
+    isMunchy: false
+  });
+
+  // Customer Account Session
   const [customerUser, setCustomerUser] = useState(() => {
     try {
       const saved = localStorage.getItem('tls_active_customer');
@@ -445,10 +520,10 @@ export default function App() {
   const [custAddress, setCustAddress] = useState(() => customerUser ? customerUser.address : (localStorage.getItem('tls_cust_addr') || ''));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(null);
-  const [syncStatusMsg, setSyncStatusMsg] = useState('');
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
+  const [addedToast, setAddedToast] = useState('');
 
-  // Orders Store (Pre-seeded with Master OMS Database + merged with local modifications)
+  // Orders Store
   const [orders, setOrders] = useState(() => {
     try {
       const saved = localStorage.getItem('tls_orders_db');
@@ -456,7 +531,6 @@ export default function App() {
       const parsed = JSON.parse(saved);
       if (!Array.isArray(parsed) || parsed.length === 0) return MASTER_OMS_ORDERS;
 
-      // Merge: Keep all Master OMS orders, overlay local status updates or newer orders
       const map = new Map();
       MASTER_OMS_ORDERS.forEach(o => map.set(o.orderId, o));
       parsed.forEach(o => {
@@ -476,12 +550,18 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [qrDataUrl, setQrDataUrl] = useState('');
 
-  // Sync to local storage on update
+  // Save to local storage on update
   useEffect(() => {
     try {
       localStorage.setItem('tls_orders_db', JSON.stringify(orders));
     } catch (e) {}
   }, [orders]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('tls_products_db', JSON.stringify(products));
+    } catch (e) {}
+  }, [products]);
 
   // Sync inputs & ensure customer name is properly resolved
   useEffect(() => {
@@ -505,7 +585,67 @@ export default function App() {
     }
   }, [customerUser]);
 
-  // CUSTOMER LOGIN HANDLER (WITH RECOGNITION BY PHONE ONLY)
+  // REAL-TIME CLOUD BROADCAST (CROSS-DEVICE SYNC)
+  const syncWithCloud = async (currentOrders, currentProducts) => {
+    try {
+      const payload = {
+        name: 'TheLadduStory_OMS_LiveState',
+        data: {
+          lastUpdated: new Date().toISOString(),
+          orders: currentOrders,
+          products: currentProducts
+        }
+      };
+      await fetch(CLOUD_SYNC_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      setIsCloudSynced(true);
+      setLastSyncTime(new Date().toLocaleTimeString());
+    } catch (err) {
+      console.warn('Cloud sync error', err);
+    }
+  };
+
+  // REAL-TIME CLOUD POLLING (POLLS EVERY 5 SECONDS FOR ZERO-DELAY UPDATES)
+  useEffect(() => {
+    const pollCloud = async () => {
+      try {
+        const res = await fetch(CLOUD_SYNC_URL);
+        if (res.ok) {
+          const json = await res.json();
+          if (json && json.data) {
+            // Update orders if cloud has updates
+            if (Array.isArray(json.data.orders) && json.data.orders.length > 0) {
+              setOrders(prev => {
+                const map = new Map();
+                prev.forEach(o => map.set(o.orderId, o));
+                json.data.orders.forEach(o => {
+                  map.set(o.orderId, { ...map.get(o.orderId), ...o });
+                });
+                return Array.from(map.values());
+              });
+            }
+            // Update products if inventory has been modified by staff
+            if (Array.isArray(json.data.products) && json.data.products.length > 0) {
+              setProducts(json.data.products);
+            }
+            setIsCloudSynced(true);
+            setLastSyncTime(new Date().toLocaleTimeString());
+          }
+        }
+      } catch (e) {
+        console.warn('Polling warning', e);
+      }
+    };
+
+    pollCloud();
+    const interval = setInterval(pollCloud, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // CUSTOMER LOGIN HANDLER
   const handleCustomerLogin = (e) => {
     if (e) e.preventDefault();
     const clean = loginPhoneInput.replace(/\D/g, '').slice(-10);
@@ -514,7 +654,6 @@ export default function App() {
       return;
     }
 
-    // 1. Resolve name & address: Check explicit input, then Master Registry, then existing orders
     let resolvedName = loginNameInput.trim();
     let resolvedAddr = '';
 
@@ -553,11 +692,16 @@ export default function App() {
     localStorage.removeItem('tls_active_customer');
   };
 
-  // Weight toggle and Cart actions
+  // Cart actions
   const getWeight = (sku) => selectedWeights[sku] || 'OPT1';
   const setWeight = (sku, val) => setSelectedWeights({ ...selectedWeights, [sku]: val });
 
   const addToCart = (product) => {
+    if (product.stockStatus === 'OUT_OF_STOCK') {
+      alert(`${product.name} is currently Out of Stock! Please check back soon.`);
+      return;
+    }
+
     const choice = getWeight(product.sku);
     const packLabel = choice === 'OPT1' ? product.opt1 : product.opt2;
     const cleanWeight = choice === 'OPT1' ? product.w1 : product.w2;
@@ -579,6 +723,10 @@ export default function App() {
         qty: 1 
       }]);
     }
+
+    // Show brief toast notification on card without opening cart sheet
+    setAddedToast(`${product.name} added!`);
+    setTimeout(() => setAddedToast(''), 1800);
   };
 
   const updateCartQty = (cartKey, delta) => {
@@ -594,7 +742,7 @@ export default function App() {
   const cartTotal = cart.reduce((sum, item) => sum + (item.unitPrice * item.qty), 0);
   const totalCartQty = cart.reduce((sum, item) => sum + item.qty, 0);
 
-  // HEADLESS GOOGLE FORM DISPATCH (REAL-TIME TO GOOGLE SHEETS)
+  // Submit to Google Form in background
   const submitToGoogleSheets = async (orderData) => {
     try {
       const itemsFormatted = orderData.items
@@ -614,17 +762,16 @@ export default function App() {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: formData.toString()
       });
-      console.log('Order successfully synced to Google Sheets via Headless Form.');
     } catch (err) {
-      console.warn('Form submission executed in background.');
+      console.warn('Form sync executed');
     }
   };
 
-  // CHECKOUT & PAYMENT HANDLER
+  // CHECKOUT
   const handleCheckout = async (e) => {
     e.preventDefault();
     if (cart.length === 0) {
-      alert('Your cart is empty! Please add delicious laddus to order.');
+      alert('Your cart is empty! Please select delicious laddus to place order.');
       return;
     }
     if (!custName.trim() || !custPhone.trim() || !custAddress.trim()) {
@@ -633,8 +780,6 @@ export default function App() {
     }
 
     setIsSubmitting(true);
-    setSyncStatusMsg('Creating Order & Syncing to Google Sheets...');
-
     const orderId = `TLS-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.floor(1000 + Math.random() * 9000)}`;
     const cleanPhone = custPhone.replace(/\D/g, '').slice(-10);
 
@@ -659,10 +804,9 @@ export default function App() {
       paymentMethod: 'UPI'
     };
 
-    // Save to local orders state
-    setOrders([newOrder, ...orders]);
+    const updatedOrders = [newOrder, ...orders];
+    setOrders(updatedOrders);
 
-    // Save customer profile
     const updatedProfile = {
       phone: cleanPhone,
       name: custName.trim(),
@@ -672,17 +816,18 @@ export default function App() {
     setCustomerUser(updatedProfile);
     localStorage.setItem('tls_active_customer', JSON.stringify(updatedProfile));
 
-    // Submit headless form to Google Sheets
+    // Submit to Google Sheets
     submitToGoogleSheets(newOrder);
 
-    // Generate UPI QR Code (Native UPI URL)
+    // Broadcast immediately to Cloud for real-time Staff OMS sync
+    syncWithCloud(updatedOrders, products);
+
+    // Generate UPI QR
     const upiUri = `upi://pay?pa=9343207515@okbizaxis&pn=The%20Laddu%20Story&am=${cartTotal}&cu=INR&tn=${encodeURIComponent(`Order ${orderId}`)}`;
     try {
       const qrUrl = await QRCode.toDataURL(upiUri, { width: 260, margin: 2 });
       setQrDataUrl(qrUrl);
-    } catch (qrErr) {
-      console.error('QR Gen Failed', qrErr);
-    }
+    } catch (qrErr) {}
 
     setOrderSuccess(newOrder);
     setCart([]);
@@ -690,7 +835,7 @@ export default function App() {
     setIsMobileCartOpen(false);
   };
 
-  // Staff Portal Login
+  // Staff Login
   const handleAdminLogin = (e) => {
     e.preventDefault();
     if (adminPinInput === '1234' || adminPinInput === '8888') {
@@ -703,16 +848,58 @@ export default function App() {
     }
   };
 
-  // Update order delivery status
-  const updateOrderStatus = (orderId, newStatus) => {
+  // Update order delivery status & broadcast to Cloud
+  const updateOrderStatus = async (orderId, newStatus) => {
     const updated = orders.map(o => o.orderId === orderId ? { ...o, status: newStatus } : o);
     setOrders(updated);
+    try {
+      localStorage.setItem('tls_orders_db', JSON.stringify(updated));
+    } catch (e) {}
+    // Broadcast status change immediately to cloud
+    await syncWithCloud(updated, products);
   };
 
   // Re-sync all orders from master dataset
-  const handleResetToMaster = () => {
+  const handleResetToMaster = async () => {
     setOrders(MASTER_OMS_ORDERS);
-    alert('✓ Synced all 7 Master Orders from Google Sheet OMS Database!');
+    setProducts(INITIAL_PRODUCTS);
+    await syncWithCloud(MASTER_OMS_ORDERS, INITIAL_PRODUCTS);
+    alert('✓ Synced all Master Orders & Products from OMS Database!');
+  };
+
+  // Save product changes (Inventory Manager)
+  const handleSaveProductEdit = async (e) => {
+    e.preventDefault();
+    if (!editingProduct) return;
+    const updated = products.map(p => p.sku === editingProduct.sku ? editingProduct : p);
+    setProducts(updated);
+    try {
+      localStorage.setItem('tls_products_db', JSON.stringify(updated));
+    } catch (e) {}
+    await syncWithCloud(orders, updated);
+    setEditingProduct(null);
+    alert(`✓ Successfully updated ${editingProduct.name}!`);
+  };
+
+  // Add new product (Inventory Manager)
+  const handleCreateProduct = async (e) => {
+    e.preventDefault();
+    if (!newProductForm.sku || !newProductForm.name) {
+      alert('Please provide SKU and Product Name.');
+      return;
+    }
+    const createdItem = {
+      ...newProductForm,
+      id: String(products.length + 1).padStart(2, '0')
+    };
+    const updated = [...products, createdItem];
+    setProducts(updated);
+    try {
+      localStorage.setItem('tls_products_db', JSON.stringify(updated));
+    } catch (e) {}
+    await syncWithCloud(orders, updated);
+    setShowAddProductModal(false);
+    alert(`✓ Product ${createdItem.name} added to catalog!`);
   };
 
   // Reorder past items
@@ -760,7 +947,7 @@ export default function App() {
     }
   };
 
-  // Staff Search & Filter (Smart phone search with normalized digits)
+  // Staff Search & Filter
   const cleanSearch = searchQuery.trim().toLowerCase();
   const searchDigits = searchQuery.replace(/\D/g, '');
 
@@ -779,7 +966,7 @@ export default function App() {
     return matchText || matchDigits;
   });
 
-  // Reusable Cart Content Drawer / Modal
+  // Reusable Cart Content Drawer
   const renderCartContent = () => (
     <div style={{ padding: '20px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -798,10 +985,10 @@ export default function App() {
       </div>
 
       {cart.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '40px 10px', color: '#64748B' }}>
+        <div style={{ textAlign: 'center', padding: '36px 10px', color: '#64748B' }}>
           <div style={{ fontSize: '2.5rem', marginBottom: '8px' }}>🥣</div>
-          <p style={{ margin: 0, fontWeight: '600' }}>Your cart is empty.</p>
-          <p style={{ margin: '4px 0 0', fontSize: '0.85rem' }}>Select your favourite laddus from the flyer below!</p>
+          <p style={{ margin: 0, fontWeight: '700', color: '#0F5869' }}>Your cart is empty.</p>
+          <p style={{ margin: '4px 0 0', fontSize: '0.85rem' }}>Select your favourite laddus from the menu!</p>
         </div>
       ) : (
         <div>
@@ -888,7 +1075,7 @@ export default function App() {
               <span>₹{cartTotal.toLocaleString('en-IN')}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#059669', marginBottom: '8px', fontWeight: '600' }}>
-              <span>Bangalore Delivery</span>
+              <span>Bangalore Express Delivery</span>
               <span>FREE</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', fontWeight: '800', color: '#0F5869' }}>
@@ -926,7 +1113,7 @@ export default function App() {
   );
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F8FAFC', fontFamily: "'Plus Jakarta Sans', system-ui, -apple-system, sans-serif", color: '#1E293B', paddingBottom: totalCartQty > 0 ? '90px' : '30px' }}>
+    <div style={{ minHeight: '100vh', background: '#F8FAFC', fontFamily: "'Plus Jakarta Sans', system-ui, -apple-system, sans-serif", color: '#1E293B', paddingBottom: totalCartQty > 0 ? '110px' : '30px' }}>
 
       {/* HEADER WITH OFFICIAL CIRCULAR LOGO */}
       <header style={{ background: '#0F5869', color: '#fff', padding: '14px 20px', position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 2px 10px rgba(0,0,0,0.1)' }}>
@@ -1086,8 +1273,29 @@ export default function App() {
       {/* SUB-HEADER STATUS BAR */}
       <div style={{ background: '#F1F5F9', borderBottom: '1px solid #E2E8F0', padding: '6px 20px', fontSize: '0.78rem', color: '#475569', textAlign: 'center' }}>
         <span>🌿 Pure Desi Cow Ghee & Unrefined Jaggery • Zero White Sugar • Freshly Prepared in Bangalore • </span>
-        <span style={{ color: '#059669', fontWeight: '700' }}>● Google Sheets Real-Time Sync</span>
+        <span style={{ color: isCloudSynced ? '#059669' : '#D97706', fontWeight: '700' }}>
+          ● Real-Time Cloud Sync Active (Synced {lastSyncTime})
+        </span>
       </div>
+
+      {/* ADDED TO CART TOAST NOTIFICATION */}
+      {addedToast && (
+        <div style={{
+          position: 'fixed',
+          top: '70px',
+          right: '20px',
+          background: '#0F5869',
+          color: '#FFFFFF',
+          padding: '10px 18px',
+          borderRadius: '10px',
+          fontWeight: '700',
+          fontSize: '0.85rem',
+          boxShadow: '0 4px 14px rgba(0,0,0,0.15)',
+          zIndex: 1500
+        }}>
+          ✓ {addedToast}
+        </div>
+      )}
 
       {/* MAIN CONTENT AREA */}
       <main style={{ maxWidth: '1400px', margin: '0 auto', padding: '20px' }}>
@@ -1123,22 +1331,23 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Products Section */}
+              {/* Products Section Header */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#0F5869', margin: 0 }}>
-                  Signature Laddus & Savory Munchies ({PRODUCTS.length} Varieties)
+                  Signature Laddus & Savory Munchies ({products.length} Varieties)
                 </h3>
                 <span style={{ fontSize: '0.8rem', color: '#64748B' }}>Freshly roasted to order</span>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
-                {PRODUCTS.map(product => {
+                {products.map(product => {
                   const currentWeight = getWeight(product.sku);
                   const price = currentWeight === 'OPT1' ? product.p500 : product.p1k;
+                  const isOutOfStock = product.stockStatus === 'OUT_OF_STOCK';
                   
                   return (
                     <div 
-                      key={product.id}
+                      key={product.id || product.sku}
                       style={{ 
                         background: '#fff', 
                         borderRadius: '16px', 
@@ -1147,7 +1356,7 @@ export default function App() {
                         boxShadow: '0 4px 15px rgba(0,0,0,0.03)',
                         display: 'flex',
                         flexDirection: 'column',
-                        transition: 'transform 0.2s ease, box-shadow 0.2s ease'
+                        opacity: isOutOfStock ? 0.75 : 1
                       }}
                     >
                       {/* Product Image */}
@@ -1171,13 +1380,34 @@ export default function App() {
                         }}>
                           {product.tag}
                         </span>
+
+                        {isOutOfStock && (
+                          <span style={{
+                            position: 'absolute',
+                            top: '12px',
+                            right: '12px',
+                            background: '#FEE2E2',
+                            color: '#991B1B',
+                            padding: '4px 8px',
+                            borderRadius: '8px',
+                            fontSize: '0.72rem',
+                            fontWeight: '800'
+                          }}>
+                            OUT OF STOCK
+                          </span>
+                        )}
                       </div>
 
                       {/* Details */}
                       <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', flex: 1 }}>
-                        <h4 style={{ margin: '0 0 6px', fontSize: '1.05rem', fontWeight: '800', color: '#0F5869' }}>
-                          {product.name}
-                        </h4>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
+                          <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '800', color: '#0F5869' }}>
+                            {product.name}
+                          </h4>
+                          <span style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: '700' }}>
+                            Min: {product.moq || '500g'}
+                          </span>
+                        </div>
                         <div style={{ fontSize: '0.78rem', color: '#64748B', marginBottom: '8px', flex: 1 }}>
                           {product.desc}
                         </div>
@@ -1230,21 +1460,22 @@ export default function App() {
                           </div>
                           <button
                             onClick={() => addToCart(product)}
+                            disabled={isOutOfStock}
                             style={{
-                              background: '#187A90',
+                              background: isOutOfStock ? '#CBD5E1' : '#187A90',
                               color: '#fff',
                               border: 'none',
                               padding: '9px 16px',
                               borderRadius: '8px',
                               fontWeight: '700',
                               fontSize: '0.85rem',
-                              cursor: 'pointer',
+                              cursor: isOutOfStock ? 'not-allowed' : 'pointer',
                               display: 'flex',
                               alignItems: 'center',
                               gap: '6px'
                             }}
                           >
-                            + Add to Cart
+                            {isOutOfStock ? 'Unavailable' : '+ Add to Cart'}
                           </button>
                         </div>
 
@@ -1508,134 +1739,252 @@ export default function App() {
         )}
 
         {/* ------------------------------------------------------------- */}
-        {/* VIEW 3: STAFF ADMIN OMS DASHBOARD                             */}
+        {/* VIEW 3: STAFF ADMIN OMS DASHBOARD & INVENTORY MANAGER         */}
         {/* ------------------------------------------------------------- */}
         {activeTab === 'admin' && (
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '14px' }}>
-              <div>
-                <h2 style={{ fontSize: '1.45rem', fontWeight: '800', color: '#0F5869', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  Kitchen & Delivery Order Manager
-                </h2>
-                <div style={{ fontSize: '0.85rem', color: '#64748B', marginTop: '2px' }}>
-                  Live Orders Stream • {orders.length} Total Orders Placed in OMS
-                </div>
+            {/* Staff Sub-Navigation */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '14px', background: '#fff', padding: '14px 20px', borderRadius: '16px', border: '1px solid #E2E8F0' }}>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  onClick={() => setAdminSection('orders')}
+                  style={{
+                    background: adminSection === 'orders' ? '#0F5869' : '#F1F5F9',
+                    color: adminSection === 'orders' ? '#fff' : '#475569',
+                    border: 'none',
+                    padding: '9px 18px',
+                    borderRadius: '8px',
+                    fontWeight: '800',
+                    fontSize: '0.9rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  📋 Orders & Kitchen Stream ({orders.length})
+                </button>
+                <button
+                  onClick={() => setAdminSection('inventory')}
+                  style={{
+                    background: adminSection === 'inventory' ? '#0F5869' : '#F1F5F9',
+                    color: adminSection === 'inventory' ? '#fff' : '#475569',
+                    border: 'none',
+                    padding: '9px 18px',
+                    borderRadius: '8px',
+                    fontWeight: '800',
+                    fontSize: '0.9rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  📦 Inventory & Menu Catalog ({products.length})
+                </button>
               </div>
 
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                <input
-                  id="staff-search-input"
-                  type="text"
-                  placeholder="Search by Phone / Name / Order ID..."
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  style={{ padding: '9px 14px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.88rem', width: '280px', fontWeight: '600' }}
-                />
-                
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <button
-                  id="staff-sync-btn"
                   onClick={handleResetToMaster}
-                  title="Reload Master Orders from Sheet"
-                  style={{ background: '#E0F2FE', color: '#0369A1', border: '1px solid #BAE6FD', padding: '9px 12px', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer' }}
+                  title="Reload Master Orders & Catalog"
+                  style={{ background: '#E0F2FE', color: '#0369A1', border: '1px solid #BAE6FD', padding: '8px 12px', borderRadius: '8px', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer' }}
                 >
-                  🔄 Sync Sheet Orders
+                  🔄 Sync Master OMS
                 </button>
-
                 <button
-                  id="staff-logout-btn"
                   onClick={() => setIsAdminLoggedIn(false)}
-                  style={{ background: '#F1F5F9', border: '1px solid #CBD5E1', padding: '9px 14px', borderRadius: '8px', fontWeight: '700', fontSize: '0.85rem', cursor: 'pointer' }}
+                  style={{ background: '#F1F5F9', border: '1px solid #CBD5E1', padding: '8px 14px', borderRadius: '8px', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer' }}
                 >
                   Logout
                 </button>
               </div>
             </div>
 
-            {/* Status Quick Filter Chips */}
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '18px', overflowX: 'auto', paddingBottom: '4px' }}>
-              {['ALL', 'RECEIVED', 'PREPARING', 'PACKED', 'OUT FOR DELIVERY', 'DELIVERED'].map(st => {
-                const count = st === 'ALL' ? orders.length : orders.filter(o => o.status === st).length;
-                const isSelected = filterStatus === st;
-                return (
-                  <button
-                    key={st}
-                    onClick={() => setFilterStatus(st)}
-                    style={{
-                      padding: '6px 12px',
-                      borderRadius: '20px',
-                      border: isSelected ? '2px solid #0F5869' : '1px solid #CBD5E1',
-                      background: isSelected ? '#0F5869' : '#fff',
-                      color: isSelected ? '#fff' : '#475569',
-                      fontWeight: '700',
-                      fontSize: '0.78rem',
-                      cursor: 'pointer',
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
-                    {st} ({count})
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Orders Cards Grid */}
-            {filteredOrders.length === 0 ? (
-              <div style={{ background: '#fff', borderRadius: '16px', padding: '40px', textAlign: 'center', border: '1px solid #E2E8F0', color: '#64748B' }}>
-                <div style={{ fontSize: '2rem', marginBottom: '8px' }}>🔍</div>
-                <div style={{ fontWeight: '700' }}>No orders found matching "{searchQuery}".</div>
-                <div style={{ fontSize: '0.82rem', marginTop: '4px' }}>Try searching by phone number (e.g. 9343207515 or 9686412342), customer name, or order ID.</div>
-              </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '18px' }}>
-                {filteredOrders.map(o => (
-                  <div key={o.orderId} style={{ background: '#fff', borderRadius: '16px', border: '1px solid #E2E8F0', padding: '18px', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
-                    
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                      <span style={{ fontWeight: '800', color: '#0F5869', fontSize: '0.95rem' }}>{o.orderId}</span>
-                      <span style={{ fontSize: '0.75rem', color: '#64748B' }}>{o.time}</span>
+            {/* SUB-VIEW A: ORDERS & KITCHEN DISPATCH */}
+            {adminSection === 'orders' && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+                  <div>
+                    <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#0F5869', margin: 0 }}>
+                      Kitchen & Delivery Order Manager
+                    </h2>
+                    <div style={{ fontSize: '0.82rem', color: '#64748B' }}>
+                      Real-time Kitchen Orders Stream • Changes sync across customer devices instantly
                     </div>
-
-                    <div style={{ marginBottom: '12px' }}>
-                      <div style={{ fontWeight: '800', fontSize: '1.05rem', color: '#1E293B' }}>{o.name}</div>
-                      <div style={{ fontSize: '0.85rem', color: '#187A90', fontWeight: '700', marginTop: '2px' }}>
-                        📞 +91 {o.phone}
-                      </div>
-                      <div style={{ fontSize: '0.78rem', color: '#64748B', marginTop: '4px' }}>
-                        📍 {o.address}
-                      </div>
-                    </div>
-
-                    <div style={{ background: '#F8FAFC', padding: '10px 12px', borderRadius: '10px', marginBottom: '14px', border: '1px solid #F1F5F9' }}>
-                      {o.items.map((it, idx) => (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem', marginBottom: '4px' }}>
-                          <span>{it.qty}x {it.name} ({it.cleanWeight || it.packLabel})</span>
-                          <b>₹{it.unitPrice * it.qty}</b>
-                        </div>
-                      ))}
-                      <div style={{ borderTop: '1px dashed #CBD5E1', marginTop: '6px', paddingTop: '6px', display: 'flex', justifyContent: 'space-between', fontWeight: '800', fontSize: '0.92rem', color: '#0F5869' }}>
-                        <span>Total Paid ({o.paymentMethod || 'UPI'}):</span>
-                        <span>₹{o.total}</span>
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                      <span style={{ fontSize: '0.75rem', fontWeight: '800', color: '#64748B' }}>STATUS:</span>
-                      <select
-                        value={o.status}
-                        onChange={e => updateOrderStatus(o.orderId, e.target.value)}
-                        style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.82rem', fontWeight: '800', background: '#F1F5F9', color: '#0F5869', cursor: 'pointer' }}
-                      >
-                        <option value="RECEIVED">RECEIVED</option>
-                        <option value="PREPARING">PREPARING</option>
-                        <option value="PACKED">PACKED</option>
-                        <option value="OUT FOR DELIVERY">OUT FOR DELIVERY</option>
-                        <option value="DELIVERED">DELIVERED</option>
-                        <option value="CANCELLED">CANCELLED</option>
-                      </select>
-                    </div>
-
                   </div>
-                ))}
+
+                  <input
+                    id="staff-search-input"
+                    type="text"
+                    placeholder="Search by Phone / Name / Order ID..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    style={{ padding: '9px 14px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.88rem', width: '280px', fontWeight: '600' }}
+                  />
+                </div>
+
+                {/* Status Quick Filter Chips */}
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '18px', overflowX: 'auto', paddingBottom: '4px' }}>
+                  {['ALL', 'RECEIVED', 'PREPARING', 'PACKED', 'OUT FOR DELIVERY', 'DELIVERED'].map(st => {
+                    const count = st === 'ALL' ? orders.length : orders.filter(o => o.status === st).length;
+                    const isSelected = filterStatus === st;
+                    return (
+                      <button
+                        key={st}
+                        onClick={() => setFilterStatus(st)}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '20px',
+                          border: isSelected ? '2px solid #0F5869' : '1px solid #CBD5E1',
+                          background: isSelected ? '#0F5869' : '#fff',
+                          color: isSelected ? '#fff' : '#475569',
+                          fontWeight: '700',
+                          fontSize: '0.78rem',
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {st} ({count})
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Orders Cards Grid */}
+                {filteredOrders.length === 0 ? (
+                  <div style={{ background: '#fff', borderRadius: '16px', padding: '40px', textAlign: 'center', border: '1px solid #E2E8F0', color: '#64748B' }}>
+                    <div style={{ fontSize: '2rem', marginBottom: '8px' }}>🔍</div>
+                    <div style={{ fontWeight: '700' }}>No orders found matching "{searchQuery}".</div>
+                    <div style={{ fontSize: '0.82rem', marginTop: '4px' }}>Try searching by phone number (e.g. 9343207515), customer name, or order ID.</div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '18px' }}>
+                    {filteredOrders.map(o => (
+                      <div key={o.orderId} style={{ background: '#fff', borderRadius: '16px', border: '1px solid #E2E8F0', padding: '18px', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
+                        
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                          <span style={{ fontWeight: '800', color: '#0F5869', fontSize: '0.95rem' }}>{o.orderId}</span>
+                          <span style={{ fontSize: '0.75rem', color: '#64748B' }}>{o.time}</span>
+                        </div>
+
+                        <div style={{ marginBottom: '12px' }}>
+                          <div style={{ fontWeight: '800', fontSize: '1.05rem', color: '#1E293B' }}>{o.name}</div>
+                          <div style={{ fontSize: '0.85rem', color: '#187A90', fontWeight: '700', marginTop: '2px' }}>
+                            📞 +91 {o.phone}
+                          </div>
+                          <div style={{ fontSize: '0.78rem', color: '#64748B', marginTop: '4px' }}>
+                            📍 {o.address}
+                          </div>
+                        </div>
+
+                        <div style={{ background: '#F8FAFC', padding: '10px 12px', borderRadius: '10px', marginBottom: '14px', border: '1px solid #F1F5F9' }}>
+                          {o.items.map((it, idx) => (
+                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem', marginBottom: '4px' }}>
+                              <span>{it.qty}x {it.name} ({it.cleanWeight || it.packLabel})</span>
+                              <b>₹{it.unitPrice * it.qty}</b>
+                            </div>
+                          ))}
+                          <div style={{ borderTop: '1px dashed #CBD5E1', marginTop: '6px', paddingTop: '6px', display: 'flex', justifyContent: 'space-between', fontWeight: '800', fontSize: '0.92rem', color: '#0F5869' }}>
+                            <span>Total Paid ({o.paymentMethod || 'UPI'}):</span>
+                            <span>₹{o.total}</span>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                          <span style={{ fontSize: '0.75rem', fontWeight: '800', color: '#64748B' }}>STATUS:</span>
+                          <select
+                            value={o.status}
+                            onChange={e => updateOrderStatus(o.orderId, e.target.value)}
+                            style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.82rem', fontWeight: '800', background: '#F1F5F9', color: '#0F5869', cursor: 'pointer' }}
+                          >
+                            <option value="RECEIVED">RECEIVED</option>
+                            <option value="PREPARING">PREPARING</option>
+                            <option value="PACKED">PACKED</option>
+                            <option value="OUT FOR DELIVERY">OUT FOR DELIVERY</option>
+                            <option value="DELIVERED">DELIVERED</option>
+                            <option value="CANCELLED">CANCELLED</option>
+                          </select>
+                        </div>
+
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* SUB-VIEW B: INVENTORY & MENU CATALOG MANAGER */}
+            {adminSection === 'inventory' && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: '12px' }}>
+                  <div>
+                    <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#0F5869', margin: 0 }}>
+                      Inventory, Pricing & MOQ Manager
+                    </h2>
+                    <div style={{ fontSize: '0.82rem', color: '#64748B' }}>
+                      Update minimum order quantities, stock status, variations, and images across the live store.
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => setShowAddProductModal(true)}
+                    style={{ background: '#0F5869', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '8px', fontWeight: '800', fontSize: '0.88rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    + Add New Item / Variation
+                  </button>
+                </div>
+
+                {/* Product Inventory Cards Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '18px' }}>
+                  {products.map(p => (
+                    <div key={p.sku} style={{ background: '#fff', borderRadius: '16px', border: '1px solid #E2E8F0', padding: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column' }}>
+                      
+                      <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+                        <img 
+                          src={p.image} 
+                          alt={p.name} 
+                          style={{ width: '64px', height: '64px', borderRadius: '10px', objectFit: 'cover' }}
+                          onError={(e) => { e.target.src = 'images/TheLadduStory_Logo.jpg'; }}
+                        />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: '800', fontSize: '1rem', color: '#0F5869' }}>{p.name}</div>
+                          <div style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: '700' }}>SKU: {p.sku}</div>
+                          <span style={{ 
+                            display: 'inline-block',
+                            marginTop: '4px',
+                            background: p.stockStatus === 'IN_STOCK' ? '#DEF7EC' : (p.stockStatus === 'LOW_STOCK' ? '#FEF3C7' : '#FEE2E2'),
+                            color: p.stockStatus === 'IN_STOCK' ? '#03543F' : (p.stockStatus === 'LOW_STOCK' ? '#92400E' : '#991B1B'),
+                            padding: '2px 8px',
+                            borderRadius: '10px',
+                            fontSize: '0.7rem',
+                            fontWeight: '800'
+                          }}>
+                            {p.stockStatus || 'IN_STOCK'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div style={{ background: '#F8FAFC', padding: '10px 12px', borderRadius: '10px', fontSize: '0.8rem', marginBottom: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: '#64748B' }}>Min Order Qty (MOQ):</span>
+                          <b>{p.moq || '500g'}</b>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: '#64748B' }}>Rate per Kg:</span>
+                          <b>₹{p.ratePerKg}</b>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: '#64748B' }}>Options:</span>
+                          <b>{p.opt1} | {p.opt2}</b>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => setEditingProduct(p)}
+                        style={{ marginTop: 'auto', background: '#F1F5F9', border: '1px solid #CBD5E1', padding: '8px', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', color: '#0F5869', cursor: 'pointer' }}
+                      >
+                        ✏️ Edit Price, MOQ & Stock
+                      </button>
+
+                    </div>
+                  ))}
+                </div>
+
               </div>
             )}
 
@@ -1645,7 +1994,7 @@ export default function App() {
       </main>
 
       {/* ------------------------------------------------------------- */}
-      {/* MOBILE STICKY FLOATING CART BAR                               */}
+      {/* MOBILE STICKY FLOATING CART BAR (NON-INTRUSIVE)              */}
       {/* ------------------------------------------------------------- */}
       {totalCartQty > 0 && activeTab === 'store' && (
         <div
@@ -1728,6 +2077,247 @@ export default function App() {
             onClick={e => e.stopPropagation()}
           >
             {renderCartContent()}
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL: EDIT PRODUCT INVENTORY / MOQ                           */}
+      {/* ------------------------------------------------------------- */}
+      {editingProduct && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ background: '#fff', borderRadius: '20px', padding: '24px', maxWidth: '440px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h3 style={{ margin: '0 0 14px', fontSize: '1.25rem', color: '#0F5869', fontWeight: '800' }}>
+              Edit Product: {editingProduct.name}
+            </h3>
+
+            <form onSubmit={handleSaveProductEdit}>
+              <div style={{ marginBottom: '10px' }}>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+                  ITEM NAME
+                </label>
+                <input
+                  type="text"
+                  value={editingProduct.name}
+                  onChange={e => setEditingProduct({ ...editingProduct, name: e.target.value })}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+                    MIN ORDER QTY (MOQ)
+                  </label>
+                  <input
+                    type="text"
+                    value={editingProduct.moq || '500g'}
+                    onChange={e => setEditingProduct({ ...editingProduct, moq: e.target.value })}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+                    STOCK STATUS
+                  </label>
+                  <select
+                    value={editingProduct.stockStatus || 'IN_STOCK'}
+                    onChange={e => setEditingProduct({ ...editingProduct, stockStatus: e.target.value })}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem', fontWeight: '700' }}
+                  >
+                    <option value="IN_STOCK">IN STOCK</option>
+                    <option value="LOW_STOCK">LOW STOCK</option>
+                    <option value="OUT_OF_STOCK">OUT OF STOCK</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+                    500g / OPT 1 PRICE (₹)
+                  </label>
+                  <input
+                    type="number"
+                    value={editingProduct.p500}
+                    onChange={e => {
+                      const p = Number(e.target.value);
+                      setEditingProduct({ 
+                        ...editingProduct, 
+                        p500: p,
+                        opt1: `${editingProduct.w1} (₹${p})`
+                      });
+                    }}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+                    1 Kg / OPT 2 PRICE (₹)
+                  </label>
+                  <input
+                    type="number"
+                    value={editingProduct.p1k}
+                    onChange={e => {
+                      const p = Number(e.target.value);
+                      setEditingProduct({ 
+                        ...editingProduct, 
+                        p1k: p,
+                        opt2: `${editingProduct.w2} (₹${p})`
+                      });
+                    }}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+                  IMAGE PATH OR URL
+                </label>
+                <input
+                  type="text"
+                  value={editingProduct.image}
+                  onChange={e => setEditingProduct({ ...editingProduct, image: e.target.value })}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                <button
+                  type="submit"
+                  style={{ flex: 1, background: '#0F5869', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
+                >
+                  Save & Update Store
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingProduct(null)}
+                  style={{ background: '#F1F5F9', border: 'none', padding: '12px 16px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL: ADD NEW PRODUCT / VARIATION                            */}
+      {/* ------------------------------------------------------------- */}
+      {showAddProductModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ background: '#fff', borderRadius: '20px', padding: '24px', maxWidth: '440px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h3 style={{ margin: '0 0 14px', fontSize: '1.25rem', color: '#0F5869', fontWeight: '800' }}>
+              Add New Product or Variation
+            </h3>
+
+            <form onSubmit={handleCreateProduct}>
+              <div style={{ marginBottom: '10px' }}>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+                  SKU CODE (e.g. BESAN-ALMOND) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newProductForm.sku}
+                  onChange={e => setNewProductForm({ ...newProductForm, sku: e.target.value.toUpperCase().replace(/\s+/g, '-') })}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '10px' }}>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+                  PRODUCT NAME *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newProductForm.name}
+                  onChange={e => setNewProductForm({ ...newProductForm, name: e.target.value })}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+                    MIN ORDER QTY
+                  </label>
+                  <input
+                    type="text"
+                    value={newProductForm.moq}
+                    onChange={e => setNewProductForm({ ...newProductForm, moq: e.target.value })}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+                    RATE PER KG (₹)
+                  </label>
+                  <input
+                    type="number"
+                    value={newProductForm.ratePerKg}
+                    onChange={e => setNewProductForm({ ...newProductForm, ratePerKg: Number(e.target.value) })}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+                    500g PRICE (₹)
+                  </label>
+                  <input
+                    type="number"
+                    value={newProductForm.p500}
+                    onChange={e => setNewProductForm({ ...newProductForm, p500: Number(e.target.value), opt1: `500g (₹${e.target.value})` })}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+                    1 KG PRICE (₹)
+                  </label>
+                  <input
+                    type="number"
+                    value={newProductForm.p1k}
+                    onChange={e => setNewProductForm({ ...newProductForm, p1k: Number(e.target.value), opt2: `1 Kg (₹${e.target.value})` })}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+                  IMAGE PATH / URL
+                </label>
+                <input
+                  type="text"
+                  value={newProductForm.image}
+                  onChange={e => setNewProductForm({ ...newProductForm, image: e.target.value })}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                <button
+                  type="submit"
+                  style={{ flex: 1, background: '#0F5869', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
+                >
+                  Create Product
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAddProductModal(false)}
+                  style={{ background: '#F1F5F9', border: 'none', padding: '12px 16px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -1883,7 +2473,7 @@ export default function App() {
               Staff & Kitchen Login
             </h3>
             <p style={{ margin: '0 0 16px', fontSize: '0.82rem', color: '#64748B' }}>
-              Enter 4-digit Staff PIN to manage live kitchen and dispatch orders.
+              Enter 4-digit Staff PIN to manage kitchen dispatch & inventory.
             </p>
 
             <form onSubmit={handleAdminLogin}>
