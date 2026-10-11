@@ -1,0 +1,11 @@
+* { box-sizing: border-box; }
+body { margin: 0; padding: 0; background-color: #faf7f4; font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+.store-main-layout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 28px; align-items: start; }
+.desktop-cart-sidebar { display: block; }
+.mobile-floating-cart-bar { display: none; }
+@media screen and (max-width: 992px) {
+  .store-main-layout { display: block !important; width: 100% !important; }
+  .desktop-cart-sidebar { display: none !important; visibility: hidden !important; height: 0 !important; width: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important; overflow: hidden !important; }
+  .mobile-floating-cart-bar { display: flex !important; }
+  input, select, textarea { font-size: 16px !important; }
+}
