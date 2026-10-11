@@ -13,6 +13,8 @@ const FORM_ENTRIES = {
 
 // REAL-TIME CLOUD SYNC ENDPOINT (CROSS-DEVICE REAL-TIME BRIDGE FOR STAFF & CUSTOMERS)
 const CLOUD_SYNC_URL = 'https://api.restful-api.dev/objects/ff808181a09d98f701a1299ccf033a8f';
+const REALTIME_TOPIC_URL = 'https://ntfy.sh/the_laddu_story_live_sync_channel';
+const APPS_SCRIPT_EXEC_URL = 'https://script.google.com/macros/s/AKfycbxIJKZkGtjRI_RXCAzBn-dQ8fs9XbG7smdQtbuEZU5z8gUAWpJCfzlEI55879LpuHb8/exec';
 
 // OFFICIAL 11 FLYER & OMS ITEMS (MATCHING EXACT SKUS & IMAGES FROM D:\The Laddu Story Application\images)
 const INITIAL_PRODUCTS = [
@@ -641,8 +643,38 @@ export default function App() {
     };
 
     pollCloud();
-    const interval = setInterval(pollCloud, 5000);
-    return () => clearInterval(interval);
+    const interval = setInterval(pollCloud, 10000);
+
+    // Live 0-latency Real-Time Server-Sent Events (SSE) Listener
+    let es = null;
+    try {
+      es = new EventSource(REALTIME_TOPIC_URL + '/sse');
+      es.onmessage = (e) => {
+        try {
+          const raw = JSON.parse(e.data);
+          if (raw && raw.message) {
+            const msg = JSON.parse(raw.message);
+            if (msg.type === 'STATUS_UPDATE') {
+              setOrders(prev => prev.map(o => o.orderId === msg.orderId ? { ...o, status: msg.status } : o));
+              setIsCloudSynced(true);
+              setLastSyncTime(new Date().toLocaleTimeString());
+            } else if (msg.type === 'NEW_ORDER' && msg.order) {
+              setOrders(prev => {
+                if (prev.some(o => o.orderId === msg.order.orderId)) return prev;
+                return [msg.order, ...prev];
+              });
+              setIsCloudSynced(true);
+              setLastSyncTime(new Date().toLocaleTimeString());
+            }
+          }
+        } catch(err) {}
+      };
+    } catch(err) {}
+
+    return () => {
+      clearInterval(interval);
+      if (es) es.close();
+    };
   }, []);
 
   // CUSTOMER LOGIN HANDLER
@@ -745,9 +777,10 @@ export default function App() {
   // Submit to Google Form in background
   const submitToGoogleSheets = async (orderData) => {
     try {
+      // Canonical format expected by FormSyncTrigger.gs: 1x Name (Weight) = ₹Total | 2x Name (Weight) = ₹Total
       const itemsFormatted = orderData.items
-        .map(i => `${i.name} [${i.cleanWeight}] x ${i.qty}`)
-        .join(', ');
+        .map(i => `${i.qty}x ${i.name} (${i.cleanWeight}) = ₹${(i.unitPrice * i.qty).toLocaleString('en-IN')}`)
+        .join(' | ');
 
       const formData = new URLSearchParams();
       formData.append(FORM_ENTRIES.ORDER_ID, orderData.orderId);
@@ -762,6 +795,30 @@ export default function App() {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: formData.toString()
       });
+      // Also submit directly to Google Apps Script Web App for instant OMS sheet entry
+      try {
+        await fetch(APPS_SCRIPT_EXEC_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({
+            orderId: orderData.orderId,
+            name: orderData.name,
+            phone: orderData.phone,
+            address: orderData.address,
+            paymentMethod: orderData.paymentMethod || 'UPI',
+            totalAmount: orderData.total,
+            items: orderData.items.map(i => ({
+              sku: i.sku,
+              name: i.name,
+              pack: i.cleanWeight,
+              qty: i.qty,
+              unitPrice: i.unitPrice
+            }))
+          })
+        });
+      } catch(e) {}
+
     } catch (err) {
       console.warn('Form sync executed');
     }
@@ -1304,7 +1361,7 @@ export default function App() {
         {/* VIEW 1: STORE FRONT & PRODUCT CATALOG                         */}
         {/* ------------------------------------------------------------- */}
         {activeTab === 'store' && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 380px', gap: '28px', alignItems: 'start' }}>
+          <div className="store-main-layout">
             
             {/* Catalog Grid */}
             <div>

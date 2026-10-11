@@ -298,31 +298,39 @@ function processFormRows(formData, ordersSheet, custSheet, processedIds) {
  */
 function parseOrderItems(itemsRaw) {
   if (!itemsRaw) return [];
-  var parts = itemsRaw.split('|');
+  var delimiter = itemsRaw.indexOf('|') !== -1 ? '|' : ',';
+  var parts = itemsRaw.split(delimiter);
   var results = [];
 
   for (var i = 0; i < parts.length; i++) {
     var p = parts[i].trim();
     if (!p || p.toLowerCase().indexOf('total:') === 0) continue;
 
-    var match = p.match(/^(\d+)x\s+(.+?)\s+\(([\d\w\s]+?)(?:\s*\([₹\d,]+\))?\)\s*=\s*[₹\s]*([\d,]+)/i);
-    
-    if (match) {
-      var qty = parseInt(match[1], 10) || 1;
-      var name = match[2].trim();
-      var pack = match[3].trim();
-      var total = parseInt(match[4].replace(/,/g, ''), 10) || 0;
-      var unitPrice = qty > 0 ? Math.round(total / qty) : total;
-      var sku = deriveSku(name);
+    var m1 = p.match(/^(\d+)x\s+(.+?)\s+\(([^)]+)\)(?:\s*=\s*[₹\s]*([\d,]+))?/i);
+    var m2 = p.match(/^(.+?)\s+\[([^\]]+)\]\s*x\s*(\d+)/i);
+    var m3 = p.match(/^(.+?)\s+\(([^)]+)\)\s*x\s*(\d+)/i);
 
-      results.push({
-        sku: sku,
-        name: name,
-        pack: pack,
-        qty: qty,
-        unitPrice: unitPrice,
-        total: total
-      });
+    if (m1) {
+      var qty = parseInt(m1[1], 10) || 1;
+      var name = m1[2].trim();
+      var pack = m1[3].trim();
+      var total = m1[4] ? parseInt(m1[4].replace(/,/g, ''), 10) : (qty * 600);
+      var unitPrice = qty > 0 ? Math.round(total / qty) : total;
+      results.push({ sku: deriveSku(name), name: name, pack: pack, qty: qty, unitPrice: unitPrice, total: total });
+    } else if (m2) {
+      var name = m2[1].trim();
+      var pack = m2[2].trim();
+      var qty = parseInt(m2[3], 10) || 1;
+      var unitPrice = 600;
+      results.push({ sku: deriveSku(name), name: name, pack: pack, qty: qty, unitPrice: unitPrice, total: unitPrice * qty });
+    } else if (m3) {
+      var name = m3[1].trim();
+      var pack = m3[2].trim();
+      var qty = parseInt(m3[3], 10) || 1;
+      var unitPrice = 600;
+      results.push({ sku: deriveSku(name), name: name, pack: pack, qty: qty, unitPrice: unitPrice, total: unitPrice * qty });
+    } else {
+      results.push({ sku: deriveSku(p), name: p, pack: '500g', qty: 1, unitPrice: 600, total: 600 });
     }
   }
 
