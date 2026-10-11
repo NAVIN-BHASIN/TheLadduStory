@@ -1,13 +1,20 @@
 /**
  * ==========================================================================================
- * THE LADDU STORY - AUTOMATED GOOGLE FORM TO OMS SYNC ENGINE
+ * THE LADDU STORY - MASTER GOOGLE FORM TO OMS SYNC ENGINE (v2.0)
  * Synchronizes: 'Form Responses 1' -> 'Orders' + 'Inventory' + 'Customers'
  * Brand: The Laddu Story | Hotline: +91 9343207515 | Account: theladdustory@gmail.com
+ * Features:
+ *   1. Automatic Trigger on Form Submit (onFormSubmit)
+ *   2. Deduplication (Never records duplicate orders)
+ *   3. Itemized Order Parsing (Each product gets its own clean row with SKU, Pack, Qty, Total)
+ *   4. One-Click Fix & Clean for existing historical orders
+ *   5. Interactive Delivery Status dropdowns on Column N
+ *   6. Dynamic Inventory Stock Deduction (=SUMIF)
  * ==========================================================================================
  */
 
 /**
- * 1. Automatically runs when Google Form receives a new order
+ * 1. Automatically runs on every new order submission
  */
 function onFormSubmit(e) {
   syncFormResponsesToOrders();
@@ -19,37 +26,35 @@ function onFormSubmit(e) {
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('✨ The Laddu Story OMS')
-    .addItem('🔄 Sync All Form Responses Now', 'syncFormResponsesToOrders')
+    .addItem('🔄 Sync New Form Responses', 'syncFormResponsesToOrders')
+    .addItem('🧹 Clean & Re-Sync All Orders Properly', 'rebuildAndFixAllOrders')
     .addItem('📦 Rebuild / Verify Inventory Formulas', 'verifyInventoryTab')
-    .addItem('🏷️ Apply Delivery Status Dropdowns', 'applyStatusDropdowns')
+    .addItem('🏷️ Re-apply Delivery Status Dropdowns', 'applyStatusDropdowns')
     .addToUi();
 }
 
 /**
- * 3. Core Sync Engine: Reads 'Form Responses 1' and populates 'Orders', 'Inventory', & 'Customers'
+ * 3. Core Sync Engine: Reads 'Form Responses 1' and appends only new unique orders
  */
 function syncFormResponsesToOrders() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  
-  // Find Form Responses sheet (Google Form default name)
   var formSheet = ss.getSheetByName('Form Responses 1') || 
                   ss.getSheetByName('Form Responses') || 
                   ss.getSheetByName('Form_Responses_1');
   
   if (!formSheet) {
-    SpreadsheetApp.getUi().alert("Sheet 'Form Responses 1' not found. Please ensure Google Form is linked to this sheet.");
+    SpreadsheetApp.getUi().alert("Sheet 'Form Responses 1' not found. Please ensure Google Form is linked.");
     return;
   }
 
-  // Ensure 'Orders', 'Inventory', and 'Customers' sheets exist
   var ordersSheet = ensureOrdersSheet(ss);
   var invSheet = ensureInventorySheet(ss);
   var custSheet = ensureCustomersSheet(ss);
 
   var formData = formSheet.getDataRange().getValues();
-  if (formData.length <= 1) return; // No responses yet (only header row)
+  if (formData.length <= 1) return;
 
-  // Cache existing OrderIDs in Orders sheet to prevent duplicate entries
+  // Cache existing OrderIDs in Orders sheet
   var existingOrders = ordersSheet.getDataRange().getValues();
   var existingIds = {};
   for (var i = 1; i < existingOrders.length; i++) {
@@ -57,15 +62,61 @@ function syncFormResponsesToOrders() {
     if (existingId) existingIds[existingId] = true;
   }
 
-  var newRowsAdded = 0;
+  var newRowsAdded = processFormRows(formData, ordersSheet, custSheet, existingIds);
+  applyStatusDropdowns();
+  Logger.log('Sync completed. New items added: ' + newRowsAdded);
+}
 
-  // Process each row in Form Responses (Row 0 is header, data starts at Row 1)
+/**
+ * 4. ONE-CLICK FIX: Clears any messy fallback rows and cleanly repopulates every order
+ */
+function rebuildAndFixAllOrders() {
+  var ui = SpreadsheetApp.getUi();
+  var response = ui.alert(
+    'Rebuild & Clean Orders Sheet',
+    'This will clean up any duplicated or generic (LADDU-MIX) rows and cleanly re-parse all orders from "Form Responses 1" into individual item rows with SKU, Pack Weight, and Quantity. Proceed?',
+    ui.ButtonSet.YES_NO
+  );
+
+  if (response !== ui.Button.YES) return;
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var formSheet = ss.getSheetByName('Form Responses 1') || ss.getSheetByName('Form Responses');
+  if (!formSheet) {
+    ui.alert("Sheet 'Form Responses 1' not found.");
+    return;
+  }
+
+  var ordersSheet = ensureOrdersSheet(ss);
+  var custSheet = ensureCustomersSheet(ss);
+  ensureInventorySheet(ss);
+
+  // Clear existing data rows (keep header row 1)
+  var lastRow = ordersSheet.getLastRow();
+  if (lastRow > 1) {
+    ordersSheet.getRange(2, 1, lastRow - 1, 16).clearContent();
+  }
+
+  var formData = formSheet.getDataRange().getValues();
+  var processedIds = {};
+  var totalRows = processFormRows(formData, ordersSheet, custSheet, processedIds);
+
+  applyStatusDropdowns();
+  ui.alert('✅ Done! All orders cleanly re-synced into ' + totalRows + ' itemized rows with exact SKUs, quantities, and status dropdowns.');
+}
+
+/**
+ * 5. Universal Form Row Processor: Splits items into clean canonical columns
+ */
+function processFormRows(formData, ordersSheet, custSheet, processedIds) {
+  var rowsAdded = 0;
+
   for (var r = 1; r < formData.length; r++) {
     var row = formData[r];
     
-    // Google Form Column Mapping:
+    // Column Mapping:
     // Col A (0): Timestamp
-    // Col B (1): OrderID (e.g. TLS-20261011-4821)
+    // Col B (1): OrderID
     // Col C (2): Customer Name
     // Col D (3): Phone Number
     // Col E (4): Delivery Address
@@ -79,54 +130,36 @@ function syncFormResponsesToOrders() {
     var custAddress = String(row[4] || '').trim();
     var itemsRaw = String(row[5] || '').trim();
 
-    // Skip if already processed into Orders
-    if (existingIds[orderId]) {
-      continue;
-    }
+    // DEDUPLICATION: Skip if this OrderID was already processed
+    if (processedIds[orderId]) continue;
 
-    // Parse item lines: "1x Ragi Walnut Laddu (1 Kg) = ₹1,200 | 2x Savory Makhana (100g) = ₹550 | Total: ₹1,750"
-    var parts = itemsRaw.split('|');
-    var orderItemCount = 0;
+    var items = parseOrderItems(itemsRaw);
 
-    for (var p = 0; p < parts.length; p++) {
-      var part = parts[p].trim();
-      if (!part || part.toLowerCase().indexOf('total:') === 0) continue;
-
-      // Match regex: e.g. "1x Till Laddu (Black Sesame) (500g) = ₹500"
-      var match = part.match(/^(\d+)x\s+(.+?)\s+\(([^()]+)\)\s*=\s*[₹\s]*([\d,]+)/i);
-      if (match) {
-        var qty = parseInt(match[1], 10) || 1;
-        var itemName = match[2].trim();
-        var packWeight = match[3].trim();
-        var itemTotal = parseInt(match[4].replace(/,/g, ''), 10) || 0;
-        var unitPrice = qty > 0 ? Math.round(itemTotal / qty) : itemTotal;
-        var sku = deriveSku(itemName);
-
+    if (items.length > 0) {
+      for (var j = 0; j < items.length; j++) {
+        var it = items[j];
         ordersSheet.appendRow([
           orderId,
           timestamp,
           'ONLINE_STORE',
           custName,
           "'" + custPhone,
-          sku,
-          itemName,
-          packWeight,
-          qty,
-          unitPrice,
-          itemTotal,
+          it.sku,
+          it.name,
+          it.pack,
+          it.qty,
+          it.unitPrice,
+          it.total,
           'UPI',
           'PAID',
           'RECEIVED',
           custAddress,
           'Auto-synced from Google Form'
         ]);
-        orderItemCount++;
-        newRowsAdded++;
+        rowsAdded++;
       }
-    }
-
-    // Fallback if custom parsing didn't match: create a single summarized row
-    if (orderItemCount === 0 && itemsRaw) {
+    } else if (itemsRaw) {
+      // Fallback only if regex couldn't find pattern
       ordersSheet.appendRow([
         orderId,
         timestamp,
@@ -145,24 +178,58 @@ function syncFormResponsesToOrders() {
         custAddress,
         itemsRaw
       ]);
-      newRowsAdded++;
+      rowsAdded++;
     }
 
-    // Mark as processed
-    existingIds[orderId] = true;
-
-    // Update Customers Sheet
+    processedIds[orderId] = true;
     updateCustomerRecord(custSheet, custPhone, custName, custAddress, timestamp);
   }
 
-  // Apply dropdown data validation to Column N (OrderStatus)
-  applyStatusDropdowns();
-
-  Logger.log('Sync completed. New items added: ' + newRowsAdded);
+  return rowsAdded;
 }
 
 /**
- * 4. Derives standard SKU from product name
+ * 6. Robust Item Parser: Handles clean weights, double parentheses, and multi-line carts
+ */
+function parseOrderItems(itemsRaw) {
+  if (!itemsRaw) return [];
+  var parts = itemsRaw.split('|');
+  var results = [];
+
+  for (var i = 0; i < parts.length; i++) {
+    var p = parts[i].trim();
+    if (!p || p.toLowerCase().indexOf('total:') === 0) continue;
+
+    // Matches both:
+    // 1) "1x Ragi Walnut Laddu (1 Kg (₹1,200)) = ₹1200" (legacy format)
+    // 2) "1x Ragi Walnut Laddu (1 Kg) = ₹1200" (new clean format)
+    // 3) "1x Till Laddu (Black Sesame) (500g) = 500"
+    var match = p.match(/^(\d+)x\s+(.+?)\s+\(([\d\w\s]+?)(?:\s*\([₹\d,]+\))?\)\s*=\s*[₹\s]*([\d,]+)/i);
+    
+    if (match) {
+      var qty = parseInt(match[1], 10) || 1;
+      var name = match[2].trim();
+      var pack = match[3].trim();
+      var total = parseInt(match[4].replace(/,/g, ''), 10) || 0;
+      var unitPrice = qty > 0 ? Math.round(total / qty) : total;
+      var sku = deriveSku(name);
+
+      results.push({
+        sku: sku,
+        name: name,
+        pack: pack,
+        qty: qty,
+        unitPrice: unitPrice,
+        total: total
+      });
+    }
+  }
+
+  return results;
+}
+
+/**
+ * 7. Derives canonical SKU from item name
  */
 function deriveSku(itemName) {
   var name = itemName.toUpperCase();
@@ -181,7 +248,7 @@ function deriveSku(itemName) {
 }
 
 /**
- * 5. Applies Interactive Delivery Status Dropdowns to Column N (OrderStatus)
+ * 8. Applies Interactive Delivery Status Dropdowns to Column N (OrderStatus)
  */
 function applyStatusDropdowns() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -202,7 +269,7 @@ function applyStatusDropdowns() {
 }
 
 /**
- * Verifies or rebuilds Inventory Sheet with SUMIF formulas
+ * 9. Rebuilds or Verifies Inventory formulas
  */
 function verifyInventoryTab() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -211,7 +278,7 @@ function verifyInventoryTab() {
 }
 
 /**
- * 6. Ensures Orders Sheet exists with proper styling
+ * 10. Ensures Orders Sheet exists with official teal flyer styling
  */
 function ensureOrdersSheet(ss) {
   var sheet = ss.getSheetByName('Orders');
@@ -232,7 +299,7 @@ function ensureOrdersSheet(ss) {
 }
 
 /**
- * 7. Ensures Inventory Sheet exists with live SUMIF formula tracking
+ * 11. Ensures Inventory Sheet exists with live SUMIF formula tracking
  */
 function ensureInventorySheet(ss) {
   var sheet = ss.getSheetByName('Inventory') || ss.getSheetByName('Menu_&_Inventory');
@@ -273,7 +340,7 @@ function ensureInventorySheet(ss) {
 }
 
 /**
- * 8. Ensures Customers Sheet exists
+ * 12. Ensures Customers Sheet exists
  */
 function ensureCustomersSheet(ss) {
   var sheet = ss.getSheetByName('Customers');
@@ -288,7 +355,7 @@ function ensureCustomersSheet(ss) {
 }
 
 /**
- * 9. Upserts Customer info in Customers Sheet
+ * 13. Upserts Customer info in Customers Sheet
  */
 function updateCustomerRecord(custSheet, phone, name, address, timestamp) {
   if (!phone) return;
@@ -304,7 +371,5 @@ function updateCustomerRecord(custSheet, phone, name, address, timestamp) {
       return;
     }
   }
-
-  // New customer
   custSheet.appendRow(["'" + phone, name, 1, timestamp, address]);
 }
