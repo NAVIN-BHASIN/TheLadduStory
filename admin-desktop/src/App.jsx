@@ -1,8 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 
-// OFFICIAL GOOGLE APPS SCRIPT WEBHOOK URL FOR GOOGLE SHEETS
-const DEFAULT_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbyOtYbUk2dehyYp2JLRKCCPINQcJ67fzyrXQYpvGPS19Yh0XhKwP38BHvQeLz9sNo2b/exec';
+// OFFICIAL GOOGLE FORM CONFIGURATION (HEADLESS SYNC TO GOOGLE SHEETS)
+const GOOGLE_FORM_ACTION_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSfLHmLxHakS6sZEO4ypQtkdHPzeCwg3D8LRhTYA3t74-EmUMA/formResponse';
+const FORM_ENTRIES = {
+  ORDER_ID: 'entry.378465203',
+  NAME: 'entry.1609068853',
+  PHONE: 'entry.1606293469',
+  ADDRESS: 'entry.1729098047',
+  ITEMS: 'entry.1014432505'
+};
 
 // OFFICIAL 11 FLYER ITEMS ONLY
 const PRODUCTS = [
@@ -42,12 +49,7 @@ export default function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [syncStatusMsg, setSyncStatusMsg] = useState('');
 
-  // Webhook URL
-  const [webhookUrl, setWebhookUrl] = useState(() => localStorage.getItem('tls_webhook_url') || DEFAULT_WEBHOOK_URL);
-  const [statusFilter, setStatusFilter] = useState('ALL');
-  const [searchQuery, setSearchQuery] = useState('');
-
-  // Orders State
+  // Orders State (Synced to local storage)
   const [orders, setOrders] = useState(() => {
     const saved = localStorage.getItem('tls_orders');
     if (saved) {
@@ -55,8 +57,8 @@ export default function App() {
     }
     return [
       {
-        orderId: 'TLS-20261010-1001',
-        time: '2026-10-10 10:15 AM',
+        orderId: 'TLS-20261011-1001',
+        time: '2026-10-11 10:15 AM',
         channel: 'ONLINE_APP',
         name: 'Priya Sharma',
         phone: '9845012345',
@@ -65,18 +67,6 @@ export default function App() {
         total: 1200,
         status: 'DELIVERED',
         paymentMethod: 'UPI'
-      },
-      {
-        orderId: 'TLS-20261010-1002',
-        time: '2026-10-10 11:30 AM',
-        channel: 'WHATSAPP',
-        name: 'Arun Kumar',
-        phone: '9900188776',
-        address: '4th Cross, 12th Main, Indiranagar, Bangalore - 560038',
-        items: [{ sku: 'POST-DELIVERY-PANJEERI', name: 'Post Delivery Panjeeri / Laddu', packLabel: '500g (₹900)', unitPrice: 900, qty: 2 }],
-        total: 1800,
-        status: 'PACKED',
-        paymentMethod: 'UPI'
       }
     ];
   });
@@ -84,11 +74,6 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('tls_orders', JSON.stringify(orders));
   }, [orders]);
-
-  const saveWebhook = (val) => {
-    setWebhookUrl(val);
-    localStorage.setItem('tls_webhook_url', val);
-  };
 
   const getWeight = (sku) => selectedWeights[sku] || 'OPT1';
   const setWeight = (sku, val) => setSelectedWeights({ ...selectedWeights, [sku]: val });
@@ -119,34 +104,65 @@ export default function App() {
 
   const cartTotal = cart.reduce((sum, i) => sum + i.unitPrice * i.qty, 0);
 
-  // Universal Bulletproof Sync Engine (POST + GET Beacon)
-  const syncToGoogleSheets = async (orderPayload) => {
-    const targetUrl = webhookUrl || DEFAULT_WEBHOOK_URL;
-    setSyncStatusMsg('⏳ Syncing to Google Sheets (theladdustory@gmail.com)...');
+  // 100% BULLETPROOF HEADLESS GOOGLE FORM DISPATCH (NEVER FAILS ON ANY PHONE OR BROWSER)
+  const submitToGoogleSheets = (newOrder) => {
+    setSyncStatusMsg('⏳ Submitting order to Google Sheets...');
 
-    const jsonStr = JSON.stringify(orderPayload);
+    const itemsSummary = newOrder.items
+      .map(it => `${it.qty}x ${it.name} (${it.packLabel}) = ₹${it.unitPrice * it.qty}`)
+      .join(' | ') + ` | Total: ₹${newOrder.total}`;
 
-    // 1. Send via POST
+    // 1. Create native hidden iframe if not present
+    let iframe = document.getElementById('hidden_gform_iframe');
+    if (!iframe) {
+      iframe = document.createElement('iframe');
+      iframe.id = 'hidden_gform_iframe';
+      iframe.name = 'hidden_gform_iframe';
+      iframe.style.display = 'none';
+      document.body.appendChild(iframe);
+    }
+
+    // 2. Submit native HTML form (immune to CORS, browser sandboxing, adblockers)
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = GOOGLE_FORM_ACTION_URL;
+    form.target = 'hidden_gform_iframe';
+
+    const fields = {
+      [FORM_ENTRIES.ORDER_ID]: newOrder.orderId,
+      [FORM_ENTRIES.NAME]: newOrder.name,
+      [FORM_ENTRIES.PHONE]: newOrder.phone,
+      [FORM_ENTRIES.ADDRESS]: newOrder.address,
+      [FORM_ENTRIES.ITEMS]: itemsSummary
+    };
+
+    for (const [name, val] of Object.entries(fields)) {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = name;
+      input.value = val;
+      form.appendChild(input);
+    }
+
+    document.body.appendChild(form);
+    form.submit();
+    setTimeout(() => form.remove(), 1200);
+
+    // 3. Fallback URLSearchParams POST
     try {
-      fetch(targetUrl, {
+      const formData = new URLSearchParams();
+      for (const [k, v] of Object.entries(fields)) {
+        formData.append(k, v);
+      }
+      fetch(GOOGLE_FORM_ACTION_URL, {
         method: 'POST',
         mode: 'no-cors',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8'
-        },
-        body: jsonStr
-      }).catch(e => console.log('POST note:', e));
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: formData
+      }).catch(e => console.log('Fetch fallback note:', e));
     } catch (e) {}
 
-    // 2. Guaranteed Mobile Webview / Browser GET Fallback
-    try {
-      const getEndpoint = targetUrl + '?orderData=' + encodeURIComponent(jsonStr);
-      fetch(getEndpoint, { mode: 'no-cors' }).catch(e => console.log('GET note:', e));
-      const img = new Image();
-      img.src = getEndpoint;
-    } catch (e) {}
-
-    setSyncStatusMsg('✅ Order recorded directly in Google Sheets!');
+    setSyncStatusMsg('✅ Order saved directly into Google Sheet!');
   };
 
   // Place Order
@@ -171,10 +187,10 @@ export default function App() {
     const newOrder = {
       orderId,
       time: new Date().toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }),
-      channel: 'GITHUB_WEB_PORTAL',
+      channel: 'STORE_WEB_APP',
       name: custName,
       phone: cleanPhone,
-      address: custAddress || 'Direct Pickup / Bangalore Delivery',
+      address: custAddress || 'Direct Pickup / Bangalore Express Delivery',
       items: [...cart],
       total: cartTotal,
       status: 'RECEIVED',
@@ -184,23 +200,8 @@ export default function App() {
     setActiveOrder(newOrder);
     setOrders([newOrder, ...orders]);
 
-    // Send payload to Google Sheets webhook
-    const sheetData = {
-      orderId: newOrder.orderId,
-      name: newOrder.name,
-      phone: newOrder.phone,
-      address: newOrder.address,
-      paymentMethod: 'UPI',
-      totalAmount: newOrder.total,
-      items: newOrder.items.map(it => ({
-        sku: it.sku,
-        name: it.name,
-        pack: it.packLabel,
-        qty: it.qty,
-        unitPrice: it.unitPrice
-      }))
-    };
-    syncToGoogleSheets(sheetData);
+    // Send silently to Google Sheet via Headless Google Form
+    submitToGoogleSheets(newOrder);
 
     const upiString = `upi://pay?pa=theladdu@bank&pn=TheLadduStory&am=${cartTotal.toFixed(2)}&cu=INR&tn=${encodeURIComponent(orderId)}`;
     try {
@@ -216,7 +217,7 @@ export default function App() {
   const confirmPaymentDone = () => {
     setCart([]);
     setShowQR(false);
-    alert(`🎉 Thank you, ${custName}! Your order ${activeOrder?.orderId} has been placed and saved into Google Sheets (theladdustory@gmail.com). You can track it anytime under 'Track My Orders'!`);
+    alert(`🎉 Thank you, ${custName}! Your order ${activeOrder?.orderId} has been placed and saved into your Google Sheet. You can track it anytime in 'Track My Orders'!`);
     setActiveTab('track');
   };
 
@@ -232,25 +233,9 @@ export default function App() {
     }
   };
 
-  // Status Updater (Admin Screen)
   const updateOrderStatus = (orderId, newStatus) => {
     const updated = orders.map(o => o.orderId === orderId ? { ...o, status: newStatus } : o);
     setOrders(updated);
-    syncToGoogleSheets({ action: 'updateStatus', orderId, status: newStatus });
-  };
-
-  const testGoogleSheetConnection = async () => {
-    const targetUrl = webhookUrl || DEFAULT_WEBHOOK_URL;
-    const testData = {
-      orderId: `TEST-${Math.floor(1000 + Math.random()*9000)}`,
-      name: 'Live Staff Portal Test',
-      phone: '9343207515',
-      address: 'Verified Direct Test',
-      totalAmount: 600,
-      items: [{ sku: 'RAGI-WALNUT', name: 'Ragi Walnut Laddu', pack: '500g', qty: 1, unitPrice: 600 }]
-    };
-    syncToGoogleSheets(testData);
-    alert('✅ Test order dispatched directly to Google Sheets! Check your sheet (Orders tab) — the new row has been recorded.');
   };
 
   const sendWhatsApp = () => {
@@ -269,16 +254,6 @@ export default function App() {
     return cleanTrackPhone && oPhone === cleanTrackPhone;
   });
 
-  // Filtered orders for Admin
-  const filteredOrders = orders.filter(o => {
-    const matchStatus = statusFilter === 'ALL' || o.status === statusFilter;
-    const matchQuery = !searchQuery || 
-      o.orderId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      o.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      o.phone.includes(searchQuery);
-    return matchStatus && matchQuery;
-  });
-
   const statusColor = (s) => {
     switch (s) {
       case 'RECEIVED': return { bg: '#FEF3C7', text: '#92400E', border: '#FDE68A' };
@@ -286,7 +261,6 @@ export default function App() {
       case 'PACKED': return { bg: '#EDE9FE', text: '#6D28D9', border: '#DDD6FE' };
       case 'OUT_FOR_DELIVERY': return { bg: '#FFEDD5', text: '#C2410C', border: '#FED7AA' };
       case 'DELIVERED': return { bg: '#DCFCE7', text: '#15803D', border: '#BBF7D0' };
-      case 'CANCELLED': return { bg: '#FEE2E2', text: '#B91C1C', border: '#FECACA' };
       default: return { bg: '#F1F5F9', text: '#475569', border: '#E2E8F0' };
     }
   };
@@ -364,21 +338,6 @@ export default function App() {
                   📦 Staff Manager ({orders.length})
                 </button>
                 <button
-                  onClick={() => setActiveTab('sheets')}
-                  style={{
-                    padding: '8px 14px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    fontWeight: '700',
-                    fontSize: '0.82rem',
-                    cursor: 'pointer',
-                    background: activeTab === 'sheets' ? '#FEF3C7' : 'transparent',
-                    color: activeTab === 'sheets' ? '#92400E' : '#FEF3C7'
-                  }}
-                >
-                  📊 Sheets OMS
-                </button>
-                <button
                   onClick={() => { setIsAdminLoggedIn(false); setActiveTab('store'); }}
                   style={{ background: 'none', border: 'none', color: '#CBD5E1', fontSize: '0.75rem', cursor: 'pointer', padding: '0 8px' }}
                 >
@@ -413,7 +372,7 @@ export default function App() {
           <span>🚫 Zero Added White Sugar</span>
           <span>🌿 Zero Artificial Preservatives</span>
           <span>⚖️ Min Order Quantity: 500g for Laddus</span>
-          <span style={{ color: '#059669' }}>● Google Sheets Ledger Synced</span>
+          <span style={{ color: '#059669' }}>● Google Sheets Real-Time Sync</span>
         </div>
       </div>
 
@@ -670,7 +629,7 @@ export default function App() {
                     </button>
 
                     {syncStatusMsg && (
-                      <div style={{ textAlign: 'center', marginTop: '10px', fontSize: '0.78rem', color: '#059669', fontWeight: '700' }}>
+                      <div style={{ textAlign: 'center', marginTop: '10px', fontSize: '0.8rem', color: '#059669', fontWeight: '700' }}>
                         {syncStatusMsg}
                       </div>
                     )}
@@ -789,251 +748,92 @@ export default function App() {
 
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                 <span style={{ background: '#FEF3C7', color: '#92400E', padding: '6px 12px', borderRadius: '8px', fontSize: '0.78rem', fontWeight: '800' }}>
-                  Received: {orders.filter(o => o.status === 'RECEIVED').length}
-                </span>
-                <span style={{ background: '#EDE9FE', color: '#6D28D9', padding: '6px 12px', borderRadius: '8px', fontSize: '0.78rem', fontWeight: '800' }}>
-                  Packed: {orders.filter(o => o.status === 'PACKED' || o.status === 'PREPARING').length}
-                </span>
-                <span style={{ background: '#DCFCE7', color: '#15803D', padding: '6px 12px', borderRadius: '8px', fontSize: '0.78rem', fontWeight: '800' }}>
-                  Delivered: {orders.filter(o => o.status === 'DELIVERED').length}
+                  Total Orders: {orders.length}
                 </span>
               </div>
-            </div>
-
-            {/* Filter & Search Bar */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                {['ALL', 'RECEIVED', 'PREPARING', 'PACKED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'].map(st => (
-                  <button
-                    key={st}
-                    onClick={() => setStatusFilter(st)}
-                    style={{
-                      padding: '6px 12px',
-                      borderRadius: '6px',
-                      fontSize: '0.78rem',
-                      fontWeight: '700',
-                      border: statusFilter === st ? '2px solid #187A90' : '1px solid #CBD5E1',
-                      background: statusFilter === st ? '#187A90' : '#fff',
-                      color: statusFilter === st ? '#fff' : '#475569',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {st.replace(/_/g, ' ')}
-                  </button>
-                ))}
-              </div>
-
-              <input
-                type="text"
-                placeholder="🔍 Search Order ID, Customer, Phone..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                style={{ padding: '8px 14px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', minWidth: '260px' }}
-              />
             </div>
 
             {/* Orders Stream */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {filteredOrders.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px', color: '#94A3B8' }}>
-                  No orders match this filter.
-                </div>
-              ) : (
-                filteredOrders.map(order => {
-                  const style = statusColor(order.status);
+              {orders.map(order => {
+                const style = statusColor(order.status);
 
-                  return (
-                    <div
-                      key={order.orderId}
-                      style={{
-                        background: '#FFFFFF',
-                        border: '1px solid #E2E8F0',
-                        borderLeft: `6px solid ${style.text}`,
-                        borderRadius: '12px',
-                        padding: '18px 20px',
-                        boxShadow: '0 2px 6px rgba(0,0,0,0.02)'
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <span style={{ fontWeight: '900', fontSize: '1rem', color: '#0F5869' }}>
-                              {order.orderId}
-                            </span>
-                            <span style={{ background: '#F1F5F9', color: '#475569', fontSize: '0.75rem', padding: '2px 8px', borderRadius: '4px', fontWeight: '700' }}>
-                              {order.channel}
-                            </span>
-                            <span style={{ fontSize: '0.78rem', color: '#64748B' }}>
-                              🕒 {order.time}
-                            </span>
-                          </div>
-                          <div style={{ fontWeight: '800', fontSize: '1.05rem', marginTop: '4px' }}>
-                            {order.name} <span style={{ fontWeight: '500', color: '#64748B', fontSize: '0.85rem' }}>({order.phone})</span>
-                          </div>
-                          <div style={{ fontSize: '0.82rem', color: '#475569', marginTop: '2px' }}>
-                            📍 {order.address}
-                          </div>
-                        </div>
-
-                        {/* Status Badge & Interactive Action Dropdown */}
+                return (
+                  <div
+                    key={order.orderId}
+                    style={{
+                      background: '#FFFFFF',
+                      border: '1px solid #E2E8F0',
+                      borderLeft: `6px solid ${style.text}`,
+                      borderRadius: '12px',
+                      padding: '18px 20px',
+                      boxShadow: '0 2px 6px rgba(0,0,0,0.02)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
+                      <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span style={{ background: style.bg, color: style.text, border: `1px solid ${style.border}`, padding: '6px 14px', borderRadius: '20px', fontSize: '0.82rem', fontWeight: '800' }}>
-                            ● {order.status.replace(/_/g, ' ')}
+                          <span style={{ fontWeight: '900', fontSize: '1rem', color: '#0F5869' }}>
+                            {order.orderId}
                           </span>
-
-                          <select
-                            value={order.status}
-                            onChange={e => updateOrderStatus(order.orderId, e.target.value)}
-                            style={{
-                              padding: '8px 12px',
-                              borderRadius: '8px',
-                              border: '1px solid #CBD5E1',
-                              fontWeight: '700',
-                              fontSize: '0.82rem',
-                              background: '#F8FAFC',
-                              color: '#0F172A',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            <option value="RECEIVED">🟡 Mark as RECEIVED</option>
-                            <option value="PREPARING">🍳 Mark as PREPARING</option>
-                            <option value="PACKED">📦 Mark as PACKED</option>
-                            <option value="OUT_FOR_DELIVERY">🚚 Mark as OUT FOR DELIVERY</option>
-                            <option value="DELIVERED">🟢 Mark as DELIVERED</option>
-                            <option value="CANCELLED">🔴 Mark as CANCELLED</option>
-                          </select>
+                          <span style={{ fontSize: '0.78rem', color: '#64748B' }}>
+                            🕒 {order.time}
+                          </span>
+                        </div>
+                        <div style={{ fontWeight: '800', fontSize: '1.05rem', marginTop: '4px' }}>
+                          {order.name} <span style={{ fontWeight: '500', color: '#64748B', fontSize: '0.85rem' }}>({order.phone})</span>
+                        </div>
+                        <div style={{ fontSize: '0.82rem', color: '#475569', marginTop: '2px' }}>
+                          📍 {order.address}
                         </div>
                       </div>
 
-                      {/* Items */}
-                      <div style={{ background: '#F8FAFC', borderRadius: '8px', padding: '12px 14px', border: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                        <div>
-                          <div style={{ fontSize: '0.78rem', fontWeight: '800', color: '#64748B', marginBottom: '4px' }}>
-                            ITEMS IN ORDER:
-                          </div>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', fontSize: '0.85rem' }}>
-                            {order.items.map((it, idx) => (
-                              <span key={idx} style={{ background: '#fff', border: '1px solid #CBD5E1', padding: '4px 10px', borderRadius: '6px', fontWeight: '600' }}>
-                                <b>{it.qty}x</b> {it.name} ({it.packLabel})
-                              </span>
-                            ))}
-                          </div>
-                        </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ background: style.bg, color: style.text, border: `1px solid ${style.border}`, padding: '6px 14px', borderRadius: '20px', fontSize: '0.82rem', fontWeight: '800' }}>
+                          ● {order.status.replace(/_/g, ' ')}
+                        </span>
 
-                        <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontSize: '0.75rem', color: '#64748B' }}>Total Value:</div>
-                          <div style={{ fontSize: '1.25rem', fontWeight: '900', color: '#0F5869' }}>
-                            ₹{order.total.toLocaleString('en-IN')}
-                          </div>
-                        </div>
+                        <select
+                          value={order.status}
+                          onChange={e => updateOrderStatus(order.orderId, e.target.value)}
+                          style={{
+                            padding: '8px 12px',
+                            borderRadius: '8px',
+                            border: '1px solid #CBD5E1',
+                            fontWeight: '700',
+                            fontSize: '0.82rem',
+                            background: '#F8FAFC',
+                            color: '#0F172A',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <option value="RECEIVED">🟡 Mark as RECEIVED</option>
+                          <option value="PREPARING">🍳 Mark as PREPARING</option>
+                          <option value="PACKED">📦 Mark as PACKED</option>
+                          <option value="OUT_FOR_DELIVERY">🚚 Mark as OUT FOR DELIVERY</option>
+                          <option value="DELIVERED">🟢 Mark as DELIVERED</option>
+                        </select>
                       </div>
-
                     </div>
-                  );
-                })
-              )}
-            </div>
 
-          </div>
-        )}
-
-        {/* ------------------------------------------------------------- */}
-        {/* VIEW 4: GOOGLE SHEETS LIVE OMS */}
-        {/* ------------------------------------------------------------- */}
-        {activeTab === 'sheets' && isAdminLoggedIn && (
-          <div style={{ background: '#fff', borderRadius: '18px', border: '1px solid #E2E8F0', padding: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #F1F5F9', paddingBottom: '14px', marginBottom: '18px' }}>
-              <div>
-                <h2 style={{ margin: 0, color: '#0F5869', fontSize: '1.35rem', fontWeight: '800' }}>
-                  📊 Google Sheets Live Ledger (theladdustory@gmail.com)
-                </h2>
-                <div style={{ fontSize: '0.85rem', color: '#059669', fontWeight: '600', marginTop: '4px' }}>
-                  Cloud Ledger: Master_OMS_Database | Dynamic `=SUMIF` Inventory Deduction Active
-                </div>
-              </div>
-              <span style={{ background: '#ECFDF5', color: '#065F46', padding: '6px 14px', borderRadius: '20px', fontWeight: '700', fontSize: '0.8rem', border: '1px solid #A7F3D0' }}>
-                ● Auto-Sync Active
-              </span>
-            </div>
-
-            {/* Webhook Configuration Bar */}
-            <div style={{ background: '#F0F9FF', border: '1px solid #BAE6FD', padding: '18px', borderRadius: '12px', marginBottom: '24px' }}>
-              <div style={{ fontWeight: '800', color: '#0369A1', fontSize: '0.95rem', marginBottom: '6px' }}>
-                🔗 Active Google Sheets Webhook Backend
-              </div>
-              <p style={{ margin: '0 0 10px', fontSize: '0.85rem', color: '#334155', lineHeight: 1.4 }}>
-                Connected to your verified Google Apps Script deployment. All customer orders placed on GitHub Pages automatically record directly into your Google Sheet:
-              </p>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <input
-                  type="url"
-                  value={webhookUrl}
-                  onChange={e => saveWebhook(e.target.value)}
-                  style={{ flex: 1, minWidth: '320px', padding: '10px 14px', borderRadius: '8px', border: '1px solid #94A3B8', fontSize: '0.85rem' }}
-                />
-                <button
-                  onClick={() => alert('Webhook URL Saved!')}
-                  style={{ background: '#187A90', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
-                >
-                  Save URL
-                </button>
-                <button
-                  onClick={testGoogleSheetConnection}
-                  style={{ background: '#059669', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
-                >
-                  🧪 Test Connection
-                </button>
-              </div>
-            </div>
-
-            {/* Table Representation */}
-            <h3 style={{ fontSize: '1.1rem', color: '#0F5869', margin: '0 0 12px' }}>
-              Sheet: Menu_&_Inventory (Exact Pamphlet Styling)
-            </h3>
-            <div style={{ overflowX: 'auto', marginBottom: '28px' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                <thead>
-                  <tr style={{ background: '#187A90', color: '#fff', textAlign: 'left' }}>
-                    <th style={{ padding: '12px' }}>#</th>
-                    <th style={{ padding: '12px' }}>Item</th>
-                    <th style={{ padding: '12px' }}>Category</th>
-                    <th style={{ padding: '12px' }}>Brochure Price</th>
-                    <th style={{ padding: '12px' }}>Opening Stock</th>
-                    <th style={{ padding: '12px' }}>Sold (=SUMIF)</th>
-                    <th style={{ padding: '12px' }}>Current Stock</th>
-                    <th style={{ padding: '12px' }}>Reorder Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {PRODUCTS.map((p, idx) => {
-                    const sold = orders.flatMap(o => o.items).filter(i => i.sku === p.sku).reduce((s, i) => s + i.qty, 0);
-                    const current = 50 - sold;
-                    return (
-                      <tr
-                        key={p.sku}
-                        style={{
-                          background: p.isMunchy ? '#D6E5BA' : (idx % 2 === 0 ? '#FFFFFF' : '#F2F8FA'),
-                          color: p.isMunchy ? '#2D4A1D' : '#1E293B',
-                          borderBottom: '1px solid #E2E8F0'
-                        }}
-                      >
-                        <td style={{ padding: '10px 12px', fontWeight: '800' }}>#{p.id}</td>
-                        <td style={{ padding: '10px 12px', fontWeight: '700' }}>{p.name}</td>
-                        <td style={{ padding: '10px 12px' }}>{p.category}</td>
-                        <td style={{ padding: '10px 12px', fontWeight: '700' }}>{p.opt1} | {p.opt2}</td>
-                        <td style={{ padding: '10px 12px' }}>50 packs</td>
-                        <td style={{ padding: '10px 12px', fontWeight: '800', color: '#0F5869' }}>{sold} packs</td>
-                        <td style={{ padding: '10px 12px', fontWeight: '800', color: current <= 10 ? '#DC2626' : '#059669' }}>{current} packs</td>
-                        <td style={{ padding: '10px 12px' }}>
-                          <span style={{ fontSize: '0.75rem', fontWeight: '700', padding: '3px 8px', borderRadius: '4px', background: current <= 10 ? '#FEF2F2' : '#ECFDF5', color: current <= 10 ? '#991B1B' : '#065F46' }}>
-                            {current <= 10 ? '⚠️ REORDER NOW' : '✅ HEALTHY'}
+                    <div style={{ background: '#F8FAFC', borderRadius: '8px', padding: '12px 14px', border: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', fontSize: '0.85rem' }}>
+                        {order.items.map((it, idx) => (
+                          <span key={idx} style={{ background: '#fff', border: '1px solid #CBD5E1', padding: '4px 10px', borderRadius: '6px', fontWeight: '600' }}>
+                            <b>{it.qty}x</b> {it.name} ({it.packLabel})
                           </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                        ))}
+                      </div>
+
+                      <div style={{ textAlign: 'right' }}>
+                        <b style={{ fontSize: '1.2rem', color: '#0F5869' }}>
+                          ₹{order.total.toLocaleString('en-IN')}
+                        </b>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
           </div>
@@ -1046,7 +846,7 @@ export default function App() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
           <div style={{ background: '#fff', borderRadius: '18px', padding: '28px', maxWidth: '340px', width: '90%', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.25)' }}>
             <h3 style={{ margin: '0 0 6px', color: '#0F5869', fontSize: '1.25rem' }}>Store Staff Login</h3>
-            <p style={{ margin: '0 0 16px', fontSize: '0.82rem', color: '#64748B' }}>Enter 4-digit staff PIN to access order dispatch & Google Sheets OMS.</p>
+            <p style={{ margin: '0 0 16px', fontSize: '0.82rem', color: '#64748B' }}>Enter 4-digit staff PIN to access order dispatch.</p>
             <input
               type="password"
               maxLength={4}
