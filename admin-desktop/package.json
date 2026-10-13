@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node -e \"const fs=require('fs'); if(fs.existsSync('dist')){fs.rmSync('dist', {recursive:true, force:true});}\" && vite build"
+    "build": "vite build && node -e \"const fs=require('fs'); ['dist/_redirects', '_redirects'].forEach(p=>{if(fs.existsSync(p)) fs.unlinkSync(p);});\""
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.3",
