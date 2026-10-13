@@ -939,6 +939,11 @@ export default function App() {
             dbOrders.forEach(o => map.set(o.orderId, { ...map.get(o.orderId), ...o }));
             return Array.from(map.values());
           });
+        } else {
+          // If Supabase tables are empty, automatically seed existing master orders into Supabase!
+          for (const ord of MASTER_OMS_ORDERS) {
+            await insertOrderToSupabase(ord);
+          }
         }
         const dbProducts = await fetchProductsFromSupabase();
         if (dbProducts && dbProducts.length > 0) {
@@ -1105,12 +1110,22 @@ export default function App() {
     await syncWithCloud(updated, products);
   };
 
-  // Re-sync all orders from master dataset
+  // Re-sync all orders from master dataset (Populates Supabase as primary DB)
   const handleResetToMaster = async () => {
     setOrders(MASTER_OMS_ORDERS);
     setProducts(INITIAL_PRODUCTS);
     await syncWithCloud(MASTER_OMS_ORDERS, INITIAL_PRODUCTS);
-    alert('✓ Synced all Master Orders & Products from OMS Database!');
+
+    if (isSupabaseConfigured()) {
+      let count = 0;
+      for (const ord of MASTER_OMS_ORDERS) {
+        await insertOrderToSupabase(ord);
+        count++;
+      }
+      alert(`✓ Successfully synced ${count} Master Orders, Items & Customers directly into Supabase Primary Database!`);
+    } else {
+      alert('✓ Synced all Master Orders & Products locally! (Connect Supabase in top bar to sync with Cloud DB)');
+    }
   };
 
   // Save product changes (Inventory Manager)
