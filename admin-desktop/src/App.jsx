@@ -11,6 +11,9 @@ import {
   fetchProductsFromSupabase,
   updateProductInSupabase,
   upsertProductInSupabase,
+  fetchCustomersFromSupabase,
+  lookupCustomerInSupabase,
+  deleteOrderInSupabase,
   subscribeToSupabaseRealtime
 } from './services/supabaseClient';
 
@@ -24,10 +27,10 @@ const FORM_ENTRIES = {
   ITEMS: 'entry.1014432505'
 };
 
-// REAL-TIME CLOUD SYNC ENDPOINT (CROSS-DEVICE REAL-TIME BRIDGE FOR STAFF & CUSTOMERS)
-const CLOUD_SYNC_URL = 'https://api.restful-api.dev/objects/ff808181a09d98f701a1299ccf033a8f';
+// REAL-TIME BROADCAST CHANNELS (SUPABASE POSTGRESQL IS 100% PRIMARY DB)
 const REALTIME_TOPIC_URL = 'https://ntfy.sh/the_laddu_story_live_sync_channel';
 const APPS_SCRIPT_EXEC_URL = 'https://script.google.com/macros/s/AKfycbxIJKZkGtjRI_RXCAzBn-dQ8fs9XbG7smdQtbuEZU5z8gUAWpJCfzlEI55879LpuHb8/exec';
+
 
 // OFFICIAL 11 FLYER & OMS ITEMS (MATCHING EXACT SKUS & IMAGES FROM D:\The Laddu Story Application\images)
 const INITIAL_PRODUCTS = [
@@ -264,198 +267,23 @@ const INITIAL_PRODUCTS = [
   }
 ];
 
-// MASTER CUSTOMER REGISTRY (RESOLVES REAL NAMES AND SAVED ADDRESSES FROM OMS DATABASE)
-const MASTER_CUSTOMER_REGISTRY = {
-  '9343207515': { name: 'Neetika', address: 'Xyz q23 blr 560103' },
-  '9606312010': { name: 'Bhoomie Bhasin', address: '#15101, Prestige Tranquility, Budigere cross' },
-  '9686412342': { name: 'Navin Bhasin', address: 'Direct Pickup / Bangalore Express Delivery' },
-  '1111111111': { name: 'SUDARSHAN LAL BHASIN', address: 'Bangalore' },
-  '9845012345': { name: 'Dr. Ananya Sharma', address: 'Koramangala, Bangalore' },
-  '9900188776': { name: 'Vikas Sundaram', address: 'Indiranagar, Bangalore' }
-};
+// MASTER OMS STATE: Supabase PostgreSQL is the 100% Primary Source of Truth
 
-// MASTER OMS DATABASE FROM GOOGLE SHEETS (ALL ACTIVE & HISTORICAL ORDERS)
-const MASTER_OMS_ORDERS = [
-  {
-    orderId: 'TLS-20261011-3227',
-    time: '10/11/26, 8:21 AM',
-    channel: 'ONLINE_STORE',
-    name: 'Bhoomie Bhasin',
-    phone: '9606312010',
-    address: '#15101, Prestige Tranquility, Budigere cross',
-    status: 'RECEIVED',
-    total: 600,
-    paymentMethod: 'UPI',
-    items: [
-      {
-        sku: 'RAGI-WALNUT',
-        name: 'Ragi Walnut Laddu',
-        cleanWeight: '500g',
-        qty: 1,
-        unitPrice: 600,
-        image: 'images/products/RAGI-WALNUT.jpg'
-      }
-    ]
-  },
-  {
-    orderId: 'TLS-20261011-9252',
-    time: '10/11/26, 8:11 AM',
-    channel: 'ONLINE_STORE',
-    name: 'Neetika',
-    phone: '9343207515',
-    address: 'Xyz q23 blr 560103',
-    status: 'RECEIVED',
-    total: 2275,
-    paymentMethod: 'UPI',
-    items: [
-      {
-        sku: 'SAVORY-MURMURA',
-        name: 'Savory Munchies (Millet Mudi Mix)',
-        cleanWeight: '200g',
-        qty: 1,
-        unitPrice: 200,
-        image: 'images/products/SAVORY-MURMURA.jpg'
-      },
-      {
-        sku: 'SAVORY-MAKHANA',
-        name: 'Savory Munchies (Roasted Makhana)',
-        cleanWeight: '100g',
-        qty: 1,
-        unitPrice: 275,
-        image: 'images/products/SAVORY-MAKHANA.jpg'
-      },
-      {
-        sku: 'POST-DELIVERY-PANJEERI',
-        name: 'Post Delivery Panjeeri / Laddu',
-        cleanWeight: '1 Kg',
-        qty: 1,
-        unitPrice: 1800,
-        image: 'images/products/POST-DELIVERY-PANJEERI.jpg'
-      }
-    ]
-  },
-  {
-    orderId: 'TLS-20261011-5303',
-    time: '10/11/26, 8:04 AM',
-    channel: 'ONLINE_STORE',
-    name: 'Navin Bhasin',
-    phone: '9686412342',
-    address: 'Direct Pickup / Bangalore Express Delivery',
-    status: 'PREPARING',
-    total: 2350,
-    paymentMethod: 'UPI',
-    items: [
-      {
-        sku: 'SATTU-ALMOND',
-        name: 'Sattu Almond Laddu',
-        cleanWeight: '1 Kg',
-        qty: 1,
-        unitPrice: 1100,
-        image: 'images/products/SATTU-ALMOND.jpg'
-      },
-      {
-        sku: 'QUINOA-MOONG-DAL',
-        name: 'Quinoa Moong Dal Laddu',
-        cleanWeight: '500g',
-        qty: 2,
-        unitPrice: 625,
-        image: 'images/products/QUINOA-MOONG-DAL.jpg'
-      }
-    ]
-  },
-  {
-    orderId: 'TLS-20261011-2033',
-    time: '10/11/26, 7:12 AM',
-    channel: 'ONLINE_STORE',
-    name: 'SUDARSHAN LAL BHASIN',
-    phone: '1111111111',
-    address: 'Bangalore',
-    status: 'OUT FOR DELIVERY',
-    total: 1100,
-    paymentMethod: 'UPI',
-    items: [
-      {
-        sku: 'RAGI-WALNUT',
-        name: 'Ragi Walnut Laddu',
-        cleanWeight: '500g',
-        qty: 1,
-        unitPrice: 600,
-        image: 'images/products/RAGI-WALNUT.jpg'
-      },
-      {
-        sku: 'TILL-BLACK-SESAME',
-        name: 'Till Laddu (Black Sesame)',
-        cleanWeight: '500g',
-        qty: 1,
-        unitPrice: 500,
-        image: 'images/products/TILL-BLACK-SESAME.jpg'
-      }
-    ]
-  },
-  {
-    orderId: 'TLS-20261009-0893',
-    time: '10/09/26, 8:05 PM',
-    channel: 'WALK_IN',
-    name: 'Kavita Menon',
-    phone: '9343207515',
-    address: 'Counter Pickup',
-    status: 'DELIVERED',
-    total: 550,
-    paymentMethod: 'CASH',
-    items: [
-      {
-        sku: 'SAVORY-MAKHANA',
-        name: 'Savory Munchies (Roasted Makhana)',
-        cleanWeight: '100g',
-        qty: 2,
-        unitPrice: 275,
-        image: 'images/products/SAVORY-MAKHANA.jpg'
-      }
-    ]
-  },
-  {
-    orderId: 'TLS-20261009-0892',
-    time: '10/09/26, 7:15 PM',
-    channel: 'MOBILE_APP',
-    name: 'Vikas Sundaram',
-    phone: '9900188776',
-    address: 'Indiranagar, Bangalore',
-    status: 'PACKED',
-    total: 1800,
-    paymentMethod: 'UPI',
-    items: [
-      {
-        sku: 'POST-DELIVERY-PANJEERI',
-        name: 'Post Delivery Panjeeri / Laddu',
-        cleanWeight: '500g',
-        qty: 2,
-        unitPrice: 900,
-        image: 'images/products/POST-DELIVERY-PANJEERI.jpg'
-      }
-    ]
-  },
-  {
-    orderId: 'TLS-20261009-0891',
-    time: '10/09/26, 6:30 PM',
-    channel: 'WHATSAPP',
-    name: 'Dr. Ananya Sharma',
-    phone: '9845012345',
-    address: 'Koramangala, Bangalore',
-    status: 'DELIVERED',
-    total: 1200,
-    paymentMethod: 'UPI',
-    items: [
-      {
-        sku: 'RAGI-WALNUT',
-        name: 'Ragi Walnut Laddu',
-        cleanWeight: '1 Kg',
-        qty: 1,
-        unitPrice: 1200,
-        image: 'images/products/RAGI-WALNUT.jpg'
-      }
-    ]
+// MASTER OMS STATE: Live orders managed strictly via Supabase Primary DB
+const MASTER_OMS_ORDERS = [];
+
+// IMMEDIATE SYNCHRONOUS PURGE OF LEGACY CACHE (Executes before React mounts)
+const CURRENT_CACHE_VERSION = 'v7_clean_supabase_truth';
+try {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    if (window.localStorage.getItem('tls_cache_version') !== CURRENT_CACHE_VERSION) {
+      window.localStorage.removeItem('tls_active_customer');
+      window.localStorage.removeItem('tls_orders_db');
+      window.localStorage.removeItem('tls_supabase_config');
+      window.localStorage.setItem('tls_cache_version', CURRENT_CACHE_VERSION);
+    }
   }
-];
+} catch (e) {}
 
 export default function App() {
   // Navigation & View State
@@ -511,21 +339,16 @@ export default function App() {
     isMunchy: false
   });
 
-  // Customer Account Session
+  // Customer Account Session (Verified against Supabase Primary DB)
   const [customerUser, setCustomerUser] = useState(() => {
     try {
+      const CURRENT_CACHE_VERSION = 'v5_clean_supabase_truth';
+      if (localStorage.getItem('tls_cache_version') !== CURRENT_CACHE_VERSION) {
+        return null;
+      }
       const saved = localStorage.getItem('tls_active_customer');
       if (!saved) return null;
-      const parsed = JSON.parse(saved);
-      if (parsed && parsed.phone) {
-        const clean = parsed.phone.replace(/\D/g, '').slice(-10);
-        if ((!parsed.name || parsed.name === 'Valued Customer') && MASTER_CUSTOMER_REGISTRY[clean]) {
-          parsed.name = MASTER_CUSTOMER_REGISTRY[clean].name;
-          if (!parsed.address) parsed.address = MASTER_CUSTOMER_REGISTRY[clean].address;
-          localStorage.setItem('tls_active_customer', JSON.stringify(parsed));
-        }
-      }
-      return parsed;
+      return JSON.parse(saved);
     } catch (e) {
       return null;
     }
@@ -534,6 +357,7 @@ export default function App() {
   const [showCustomerLoginModal, setShowCustomerLoginModal] = useState(false);
   const [loginPhoneInput, setLoginPhoneInput] = useState('');
   const [loginNameInput, setLoginNameInput] = useState('');
+  const [isCustomerLoggingIn, setIsCustomerLoggingIn] = useState(false);
 
   // Cart & Order Form State
   const [cart, setCart] = useState([]);
@@ -556,26 +380,19 @@ export default function App() {
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
   const [addedToast, setAddedToast] = useState('');
 
-  // Orders Store
+  // Orders Store (Supabase PostgreSQL is primary)
   const [orders, setOrders] = useState(() => {
     try {
+      const CURRENT_CACHE_VERSION = 'v5_clean_supabase_truth';
+      if (localStorage.getItem('tls_cache_version') !== CURRENT_CACHE_VERSION) {
+        return [];
+      }
       const saved = localStorage.getItem('tls_orders_db');
-      if (!saved) return MASTER_OMS_ORDERS;
+      if (!saved) return [];
       const parsed = JSON.parse(saved);
-      if (!Array.isArray(parsed) || parsed.length === 0) return MASTER_OMS_ORDERS;
-
-      const map = new Map();
-      MASTER_OMS_ORDERS.forEach(o => map.set(o.orderId, o));
-      parsed.forEach(o => {
-        if (map.has(o.orderId)) {
-          map.set(o.orderId, { ...map.get(o.orderId), ...o });
-        } else {
-          map.set(o.orderId, o);
-        }
-      });
-      return Array.from(map.values());
+      return Array.isArray(parsed) ? parsed : [];
     } catch (e) {
-      return MASTER_OMS_ORDERS;
+      return [];
     }
   });
 
@@ -596,86 +413,37 @@ export default function App() {
     } catch (e) {}
   }, [products]);
 
-  // Sync inputs & ensure customer name is properly resolved
+  // Auto-purge legacy mock cache so Supabase PostgreSQL is strictly primary
+  useEffect(() => {
+    try {
+      const CURRENT_CACHE_VERSION = 'v5_clean_supabase_truth';
+      const savedVer = localStorage.getItem('tls_cache_version');
+      if (savedVer !== CURRENT_CACHE_VERSION) {
+        localStorage.removeItem('tls_active_customer');
+        localStorage.removeItem('tls_orders_db');
+        localStorage.removeItem('tls_supabase_config');
+        localStorage.setItem('tls_cache_version', CURRENT_CACHE_VERSION);
+      }
+    } catch (e) {}
+  }, []);
+
+  // Sync inputs when customerUser changes
   useEffect(() => {
     if (customerUser && customerUser.phone) {
-      const clean = customerUser.phone.replace(/\D/g, '').slice(-10);
-      if ((!customerUser.name || customerUser.name === 'Valued Customer') && MASTER_CUSTOMER_REGISTRY[clean]) {
-        const upgraded = {
-          ...customerUser,
-          name: MASTER_CUSTOMER_REGISTRY[clean].name,
-          address: customerUser.address || MASTER_CUSTOMER_REGISTRY[clean].address
-        };
-        setCustomerUser(upgraded);
-        try {
-          localStorage.setItem('tls_active_customer', JSON.stringify(upgraded));
-        } catch (e) {}
-      } else {
-        setCustName(customerUser.name || '');
-        setCustPhone(customerUser.phone || '');
-        setCustAddress(customerUser.address || '');
-      }
+      setCustName(customerUser.name || '');
+      setCustPhone(customerUser.phone || '');
+      setCustAddress(customerUser.address || '');
     }
   }, [customerUser]);
 
-  // REAL-TIME CLOUD BROADCAST (CROSS-DEVICE SYNC)
-  const syncWithCloud = async (currentOrders, currentProducts) => {
-    try {
-      const payload = {
-        name: 'TheLadduStory_OMS_LiveState',
-        data: {
-          lastUpdated: new Date().toISOString(),
-          orders: currentOrders,
-          products: currentProducts
-        }
-      };
-      await fetch(CLOUD_SYNC_URL, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      setIsCloudSynced(true);
-      setLastSyncTime(new Date().toLocaleTimeString());
-    } catch (err) {
-      console.warn('Cloud sync error', err);
-    }
+  // REAL-TIME CLOUD STATUS INDICATOR
+  const syncWithCloud = async () => {
+    setIsCloudSynced(true);
+    setLastSyncTime(new Date().toLocaleTimeString());
   };
 
-  // REAL-TIME CLOUD POLLING (POLLS EVERY 5 SECONDS FOR ZERO-DELAY UPDATES)
+  // REAL-TIME SUPABASE POSTGRESQL ENGINE & EVENT SUBSCRIPTION
   useEffect(() => {
-    const pollCloud = async () => {
-      try {
-        const res = await fetch(CLOUD_SYNC_URL);
-        if (res.ok) {
-          const json = await res.json();
-          if (json && json.data) {
-            // Update orders if cloud has updates
-            if (Array.isArray(json.data.orders) && json.data.orders.length > 0) {
-              setOrders(prev => {
-                const map = new Map();
-                prev.forEach(o => map.set(o.orderId, o));
-                json.data.orders.forEach(o => {
-                  map.set(o.orderId, { ...map.get(o.orderId), ...o });
-                });
-                return Array.from(map.values());
-              });
-            }
-            // Update products if inventory has been modified by staff
-            if (Array.isArray(json.data.products) && json.data.products.length > 0) {
-              setProducts(json.data.products);
-            }
-            setIsCloudSynced(true);
-            setLastSyncTime(new Date().toLocaleTimeString());
-          }
-        }
-      } catch (e) {
-        console.warn('Polling warning', e);
-      }
-    };
-
-    pollCloud();
-    const interval = setInterval(pollCloud, 10000);
-
     // Auto-prompt staff login modal if ?staff is visited
     if (isStaffUrl && !isAdminLoggedIn) {
       setShowLoginModal(true);
@@ -686,17 +454,36 @@ export default function App() {
     if (isSupabaseConfigured()) {
       setSupabaseConnected(true);
       fetchOrdersFromSupabase().then(dbOrders => {
-        if (dbOrders && dbOrders.length > 0) {
-          setOrders(prev => {
-            const map = new Map();
-            prev.forEach(o => map.set(o.orderId, o));
-            dbOrders.forEach(o => map.set(o.orderId, { ...map.get(o.orderId), ...o }));
-            return Array.from(map.values());
-          });
+        if (dbOrders) {
+          setOrders(dbOrders);
           setIsCloudSynced(true);
           setLastSyncTime(new Date().toLocaleTimeString());
+
+          // Validate current active customer against Supabase
+          const activeSaved = localStorage.getItem('tls_active_customer');
+          if (activeSaved) {
+            try {
+              const active = JSON.parse(activeSaved);
+              if (active && active.phone) {
+                const clean = active.phone.replace(/\D/g, '').slice(-10);
+                lookupCustomerInSupabase(clean).then(dbCust => {
+                  const hasOrders = dbOrders.some(o => (o.phone || '').replace(/\D/g, '').slice(-10) === clean);
+                  if (!dbCust && !hasOrders) {
+                    console.warn('[Auth] Customer deleted from Supabase. Logging out.');
+                    setCustomerUser(null);
+                    localStorage.removeItem('tls_active_customer');
+                  } else if (dbCust && (dbCust.name !== active.name || dbCust.address !== active.address)) {
+                    const refreshed = { ...active, name: dbCust.name, address: dbCust.address || active.address };
+                    setCustomerUser(refreshed);
+                    localStorage.setItem('tls_active_customer', JSON.stringify(refreshed));
+                  }
+                });
+              }
+            } catch (e) {}
+          }
         }
       });
+
       fetchProductsFromSupabase().then(dbProducts => {
         if (dbProducts && dbProducts.length > 0) {
           setProducts(dbProducts);
@@ -716,6 +503,10 @@ export default function App() {
             });
             setIsCloudSynced(true);
             setLastSyncTime(new Date().toLocaleTimeString());
+          } else if (orderPayload.eventType === 'DELETE' && orderPayload.old) {
+            setOrders(prev => prev.filter(item => item.orderId !== orderPayload.old.order_id));
+            setIsCloudSynced(true);
+            setLastSyncTime(new Date().toLocaleTimeString());
           }
         },
         (prodPayload) => {
@@ -728,6 +519,32 @@ export default function App() {
               p500: Number(p.p500),
               p1k: Number(p.p1k)
             } : item));
+          } else if (prodPayload.eventType === 'INSERT' && prodPayload.new) {
+            fetchProductsFromSupabase().then(latest => {
+              if (latest) setProducts(latest);
+            });
+          }
+        },
+        (custPayload) => {
+          if (custPayload.eventType === 'DELETE' && custPayload.old) {
+            const delPhone = custPayload.old.phone;
+            setCustomerUser(curr => {
+              if (curr && (curr.phone || '').replace(/\D/g, '').slice(-10) === delPhone) {
+                localStorage.removeItem('tls_active_customer');
+                return null;
+              }
+              return curr;
+            });
+          } else if (custPayload.eventType === 'UPDATE' && custPayload.new) {
+            const upd = custPayload.new;
+            setCustomerUser(curr => {
+              if (curr && (curr.phone || '').replace(/\D/g, '').slice(-10) === upd.phone) {
+                const refreshed = { ...curr, name: upd.name, address: upd.address || curr.address };
+                localStorage.setItem('tls_active_customer', JSON.stringify(refreshed));
+                return refreshed;
+              }
+              return curr;
+            });
           }
         }
       );
@@ -760,14 +577,13 @@ export default function App() {
     } catch(err) {}
 
     return () => {
-      clearInterval(interval);
       if (es) es.close();
       if (typeof unsubSupabase === 'function') unsubSupabase();
     };
   }, []);
 
-  // CUSTOMER LOGIN HANDLER
-  const handleCustomerLogin = (e) => {
+  // CUSTOMER LOGIN HANDLER (STRICT SUPABASE VALIDATION)
+  const handleCustomerLogin = async (e) => {
     if (e) e.preventDefault();
     const clean = loginPhoneInput.replace(/\D/g, '').slice(-10);
     if (!clean || clean.length < 10) {
@@ -775,37 +591,47 @@ export default function App() {
       return;
     }
 
-    let resolvedName = loginNameInput.trim();
-    let resolvedAddr = '';
+    setIsCustomerLoggingIn(true);
+    try {
+      let customerRecord = null;
+      let customerOrders = [];
 
-    if (!resolvedName && MASTER_CUSTOMER_REGISTRY[clean]) {
-      resolvedName = MASTER_CUSTOMER_REGISTRY[clean].name;
-      resolvedAddr = MASTER_CUSTOMER_REGISTRY[clean].address || '';
-    }
-
-    if (!resolvedName) {
-      const prevOrder = orders.find(o => (o.phone || '').replace(/\D/g, '').slice(-10) === clean);
-      if (prevOrder) {
-        resolvedName = prevOrder.name;
-        resolvedAddr = prevOrder.address || '';
+      if (isSupabaseConfigured()) {
+        customerRecord = await lookupCustomerInSupabase(clean);
+        const dbOrders = await fetchOrdersFromSupabase();
+        if (dbOrders) {
+          customerOrders = dbOrders.filter(o => (o.phone || '').replace(/\D/g, '').slice(-10) === clean);
+        }
+      } else {
+        customerOrders = orders.filter(o => (o.phone || '').replace(/\D/g, '').slice(-10) === clean);
       }
+
+      // If customer is deleted/not found in Supabase and has no past orders, reject login
+      if (!customerRecord && customerOrders.length === 0) {
+        alert('❌ Account not found for +91 ' + clean + '.\n\nThis phone number does not exist in our customer records. Please place an order from the store first, or check your 10-digit number.');
+        return;
+      }
+
+      const resolvedName = customerRecord?.name || customerOrders[0]?.name || loginNameInput.trim() || 'Valued Customer';
+      const resolvedAddr = customerRecord?.address || customerOrders[0]?.address || '';
+
+      const profile = {
+        phone: clean,
+        name: resolvedName,
+        address: resolvedAddr,
+        loggedInAt: new Date().toISOString()
+      };
+
+      setCustomerUser(profile);
+      localStorage.setItem('tls_active_customer', JSON.stringify(profile));
+      setShowCustomerLoginModal(false);
+      setActiveTab('track');
+    } catch (err) {
+      console.error('Customer login error:', err);
+      alert('Error verifying customer account. Please try again.');
+    } finally {
+      setIsCustomerLoggingIn(false);
     }
-
-    if (!resolvedName) {
-      resolvedName = 'Valued Customer';
-    }
-
-    const profile = {
-      phone: clean,
-      name: resolvedName,
-      address: resolvedAddr,
-      loggedInAt: new Date().toISOString()
-    };
-
-    setCustomerUser(profile);
-    localStorage.setItem('tls_active_customer', JSON.stringify(profile));
-    setShowCustomerLoginModal(false);
-    setActiveTab('track');
   };
 
   const handleCustomerLogout = () => {
@@ -926,18 +752,8 @@ export default function App() {
       if (ok) {
         setSupabaseConnected(true);
         const dbOrders = await fetchOrdersFromSupabase();
-        if (dbOrders && dbOrders.length > 0) {
-          setOrders(prev => {
-            const map = new Map();
-            prev.forEach(o => map.set(o.orderId, o));
-            dbOrders.forEach(o => map.set(o.orderId, { ...map.get(o.orderId), ...o }));
-            return Array.from(map.values());
-          });
-        } else {
-          // If Supabase tables are empty, automatically seed existing master orders into Supabase!
-          for (const ord of MASTER_OMS_ORDERS) {
-            await insertOrderToSupabase(ord);
-          }
+        if (dbOrders) {
+          setOrders(dbOrders);
         }
         const dbProducts = await fetchProductsFromSupabase();
         if (dbProducts && dbProducts.length > 0) {
@@ -1114,21 +930,18 @@ export default function App() {
     await syncWithCloud(updated, products);
   };
 
-  // Re-sync all orders from master dataset (Populates Supabase as primary DB)
+  // Re-sync all live data from Supabase Primary Database
   const handleResetToMaster = async () => {
-    setOrders(MASTER_OMS_ORDERS);
-    setProducts(INITIAL_PRODUCTS);
-    await syncWithCloud(MASTER_OMS_ORDERS, INITIAL_PRODUCTS);
-
     if (isSupabaseConfigured()) {
-      let count = 0;
-      for (const ord of MASTER_OMS_ORDERS) {
-        await insertOrderToSupabase(ord);
-        count++;
-      }
-      alert(`✓ Successfully synced ${count} Master Orders, Items & Customers directly into Supabase Primary Database!`);
+      const dbOrders = await fetchOrdersFromSupabase();
+      if (dbOrders) setOrders(dbOrders);
+      const dbProducts = await fetchProductsFromSupabase();
+      if (dbProducts) setProducts(dbProducts);
+      setIsCloudSynced(true);
+      setLastSyncTime(new Date().toLocaleTimeString());
+      alert(`✓ Refreshed! Synced ${dbOrders ? dbOrders.length : 0} live orders and ${dbProducts ? dbProducts.length : 0} products directly from Supabase Primary Database.`);
     } else {
-      alert('✓ Synced all Master Orders & Products locally! (Connect Supabase in top bar to sync with Cloud DB)');
+      alert('Supabase is not configured.');
     }
   };
 
@@ -2023,7 +1836,7 @@ export default function App() {
                     <input
                       id="customer-login-phone-input"
                       type="tel"
-                      placeholder="e.g. 9343207515 or 9686412342"
+                      placeholder="e.g. 9686412341 or 9686412342"
                       value={loginPhoneInput}
                       onChange={e => setLoginPhoneInput(e.target.value)}
                       required
@@ -2051,9 +1864,10 @@ export default function App() {
                   <button
                     id="customer-login-submit-btn"
                     type="submit"
-                    style={{ width: '100%', background: '#187A90', color: '#fff', border: 'none', padding: '13px', borderRadius: '8px', fontWeight: '800', fontSize: '1rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(24, 122, 144, 0.3)' }}
+                    disabled={isCustomerLoggingIn}
+                    style={{ width: '100%', background: isCustomerLoggingIn ? '#64748B' : '#187A90', color: '#fff', border: 'none', padding: '13px', borderRadius: '8px', fontWeight: '800', fontSize: '1rem', cursor: isCustomerLoggingIn ? 'not-allowed' : 'pointer', boxShadow: '0 4px 12px rgba(24, 122, 144, 0.3)' }}
                   >
-                    View My Orders & History →
+                    {isCustomerLoggingIn ? '⏳ Verifying with Supabase...' : 'View My Orders & History →'}
                   </button>
                 </form>
               </div>
@@ -2200,7 +2014,7 @@ export default function App() {
                   <div style={{ background: '#fff', borderRadius: '16px', padding: '40px', textAlign: 'center', border: '1px solid #E2E8F0', color: '#64748B' }}>
                     <div style={{ fontSize: '2rem', marginBottom: '8px' }}>🔍</div>
                     <div style={{ fontWeight: '700' }}>No orders found matching "{searchQuery}".</div>
-                    <div style={{ fontSize: '0.82rem', marginTop: '4px' }}>Try searching by phone number (e.g. 9343207515), customer name, or order ID.</div>
+                    <div style={{ fontSize: '0.82rem', marginTop: '4px' }}>Try searching by phone number (e.g. 9686412341 or 9686412342), customer name, or order ID.</div>
                   </div>
                 ) : (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '18px' }}>
@@ -2707,7 +2521,7 @@ export default function App() {
                 <input
                   id="modal-customer-phone-input"
                   type="tel"
-                  placeholder="e.g. 9343207515"
+                  placeholder="e.g. 9686412341"
                   value={loginPhoneInput}
                   onChange={e => setLoginPhoneInput(e.target.value)}
                   required

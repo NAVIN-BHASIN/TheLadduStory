@@ -5,7 +5,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Production Supabase Credentials (Auto-connected for all customers & staff)
-const DEFAULT_SUPABASE_URL = 'https://xhxepdlaqifqtlfoaqrae.supabase.co';
+const DEFAULT_SUPABASE_URL = 'https://xhxepdlaqifqtfoaqrae.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhoeGVwZGxhcWlmcXRmb2FxcmFlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE5MDY0MDcsImV4cCI6MjEwNzQ4MjQwN30.RHGGLcDZA6H4mvcOkOVOfryFlqHBayBJ8Ox6CMQq6Ic';
 
 const getSavedConfig = () => {
@@ -13,7 +13,12 @@ const getSavedConfig = () => {
     const saved = localStorage.getItem('tls_supabase_config');
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (parsed.url && parsed.anonKey) return parsed;
+      // Discard previous invalid URL typo if present
+      if (parsed.url && parsed.url.includes('qtlfo')) {
+        localStorage.removeItem('tls_supabase_config');
+      } else if (parsed.url && parsed.anonKey) {
+        return parsed;
+      }
     }
   } catch (e) {}
 
@@ -306,11 +311,70 @@ export const upsertProductInSupabase = async (product) => {
 };
 
 export const updateProductInSupabase = upsertProductInSupabase;
+ 
+/**
+ * Fetch all registered customers from Supabase (CRM master source)
+ */
+export const fetchCustomersFromSupabase = async () => {
+  if (!supabaseInstance) return null;
+  try {
+    const { data, error } = await supabaseInstance
+      .from('customers')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('[Supabase] fetchCustomers error:', err);
+    return null;
+  }
+};
 
 /**
- * Subscribe to real-time changes via WebSockets
+ * Look up customer in Supabase by 10-digit mobile number
  */
-export const subscribeToSupabaseRealtime = (onOrderChange, onProductChange) => {
+export const lookupCustomerInSupabase = async (phone) => {
+  if (!supabaseInstance) return null;
+  try {
+    const cleanPhone = phone.replace(/\D/g, '').slice(-10);
+    const { data, error } = await supabaseInstance
+      .from('customers')
+      .select('*')
+      .eq('phone', cleanPhone)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data;
+  } catch (err) {
+    console.error('[Supabase] lookupCustomer error:', err);
+    return null;
+  }
+};
+
+/**
+ * Delete order from Supabase
+ */
+export const deleteOrderInSupabase = async (orderId) => {
+  if (!supabaseInstance) return { success: false, reason: 'NOT_CONFIGURED' };
+  try {
+    const { error } = await supabaseInstance
+      .from('orders')
+      .delete()
+      .eq('order_id', orderId);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err) {
+    console.error('[Supabase] deleteOrder error:', err);
+    return { success: false, error: err.message };
+  }
+};
+
+/**
+ * Subscribe to real-time changes via WebSockets for orders, products, and customers
+ */
+export const subscribeToSupabaseRealtime = (onOrderChange, onProductChange, onCustomerChange) => {
   if (!supabaseInstance) return () => {};
 
   try {
@@ -322,6 +386,9 @@ export const subscribeToSupabaseRealtime = (onOrderChange, onProductChange) => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, (payload) => {
         if (onProductChange) onProductChange(payload);
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, (payload) => {
+        if (onCustomerChange) onCustomerChange(payload);
+      })
       .subscribe();
 
     return () => {
@@ -332,3 +399,4 @@ export const subscribeToSupabaseRealtime = (onOrderChange, onProductChange) => {
     return () => {};
   }
 };
+
