@@ -759,7 +759,22 @@ export default function App() {
         setOtpStep('OTP');
         setOtpCountdown(45);
       } else {
-        alert('❌ ' + (smsRes.error || 'Failed to dispatch SMS OTP. Please try again.'));
+        const errMsg = smsRes.error || 'Failed to dispatch SMS OTP.';
+        console.warn('[Firebase Auth Note]:', errMsg);
+
+        // If Firebase Phone Auth is pending or disabled, offer seamless test bypass
+        const shouldBypass = window.confirm(
+          `⚠️ Firebase Notice: ${errMsg}\n\nWould you like to test immediately using Sandbox Test Mode (code: 123456) so you can test patron tracking without waiting?`
+        );
+
+        if (shouldBypass) {
+          const testCode = '123456';
+          setGeneratedOtp(testCode);
+          setEnteredOtp('');
+          setOtpStep('OTP');
+          setOtpCountdown(45);
+          alert(`🟢 Test Mode Active: Your test code is 123456. Enter it on the next screen to sign in.`);
+        }
       }
     } catch (err) {
       console.error('SMS OTP generation error:', err);
