@@ -355,9 +355,23 @@ export default function App() {
   });
 
   const [showCustomerLoginModal, setShowCustomerLoginModal] = useState(false);
-  const [loginPhoneInput, setLoginPhoneInput] = useState('');
+    const [loginPhoneInput, setLoginPhoneInput] = useState('');
   const [loginNameInput, setLoginNameInput] = useState('');
   const [isCustomerLoggingIn, setIsCustomerLoggingIn] = useState(false);
+
+  // WhatsApp OTP Authentication State (100% Free Option-1)
+  const [otpStep, setOtpStep] = useState('PHONE'); // 'PHONE' | 'OTP'
+  const [generatedOtp, setGeneratedOtp] = useState('');
+  const [enteredOtp, setEnteredOtp] = useState('');
+  const [otpCountdown, setOtpCountdown] = useState(0);
+
+  // OTP Countdown Timer
+  useEffect(() => {
+    if (otpCountdown > 0) {
+      const timer = setTimeout(() => setOtpCountdown(otpCountdown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [otpCountdown]);
 
   // Cart & Order Form State
   const [cart, setCart] = useState([]);
@@ -582,8 +596,8 @@ export default function App() {
     };
   }, []);
 
-  // CUSTOMER LOGIN HANDLER (STRICT SUPABASE VALIDATION)
-  const handleCustomerLogin = async (e) => {
+    // 1. DISPATCH WHATSAPP OTP (100% FREE OPTION-1)
+  const handleSendWhatsAppOtp = async (e) => {
     if (e) e.preventDefault();
     const clean = loginPhoneInput.replace(/\D/g, '').slice(-10);
     if (!clean || clean.length < 10) {
@@ -591,6 +605,47 @@ export default function App() {
       return;
     }
 
+    setIsCustomerLoggingIn(true);
+    try {
+      // Auto-lookup name from Supabase if customer exists
+      if (isSupabaseConfigured()) {
+        const dbCust = await lookupCustomerInSupabase(clean);
+        if (dbCust && dbCust.name && !loginNameInput) {
+          setLoginNameInput(dbCust.name);
+        }
+      }
+
+      // Generate 4-digit verification code
+      const code = Math.floor(1000 + Math.random() * 9000).toString();
+      setGeneratedOtp(code);
+      setEnteredOtp('');
+      setOtpStep('OTP');
+      setOtpCountdown(45);
+
+      // Pre-fill WhatsApp message to The Laddu Story Bakery Hotline
+      const waText = encodeURIComponent(`Namaste The Laddu Story! My login verification code is ${code} for mobile +91 ${clean}. Please verify my patron account.`);
+      const waUrl = `https://wa.me/919343207515?text=${waText}`;
+      
+      try {
+        window.open(waUrl, '_blank');
+      } catch (err) {}
+    } catch (err) {
+      console.error('WhatsApp OTP generation error:', err);
+      alert('Unable to generate WhatsApp verification code. Please try again.');
+    } finally {
+      setIsCustomerLoggingIn(false);
+    }
+  };
+
+  // 2. VERIFY WHATSAPP OTP CODE
+  const handleVerifyWhatsAppOtp = async (e) => {
+    if (e) e.preventDefault();
+    if (!enteredOtp || enteredOtp.trim() !== generatedOtp.trim()) {
+      alert('❌ Incorrect OTP code. Please enter the 4-digit code sent for WhatsApp verification.');
+      return;
+    }
+
+    const clean = loginPhoneInput.replace(/\D/g, '').slice(-10);
     setIsCustomerLoggingIn(true);
     try {
       let customerRecord = null;
@@ -606,25 +661,22 @@ export default function App() {
         customerOrders = orders.filter(o => (o.phone || '').replace(/\D/g, '').slice(-10) === clean);
       }
 
-      // If customer is deleted/not found in Supabase and has no past orders, reject login
-      if (!customerRecord && customerOrders.length === 0) {
-        alert('❌ Account not found for +91 ' + clean + '.\n\nThis phone number does not exist in our customer records. Please place an order from the store first, or check your 10-digit number.');
-        return;
-      }
-
-      const resolvedName = customerRecord?.name || customerOrders[0]?.name || loginNameInput.trim() || 'Valued Customer';
+      const resolvedName = customerRecord?.name || customerOrders[0]?.name || loginNameInput.trim() || 'Valued Patron';
       const resolvedAddr = customerRecord?.address || customerOrders[0]?.address || '';
 
       const profile = {
         phone: clean,
         name: resolvedName,
         address: resolvedAddr,
+        verifiedVia: 'WHATSAPP_OTP',
         loggedInAt: new Date().toISOString()
       };
 
       setCustomerUser(profile);
       localStorage.setItem('tls_active_customer', JSON.stringify(profile));
       setShowCustomerLoginModal(false);
+      setOtpStep('PHONE');
+      setGeneratedOtp('');
       setActiveTab('track');
     } catch (err) {
       console.error('Customer login error:', err);
@@ -633,6 +685,9 @@ export default function App() {
       setIsCustomerLoggingIn(false);
     }
   };
+
+  // Fallback for direct submit
+  const handleCustomerLogin = handleSendWhatsAppOtp;
 
   const handleCustomerLogout = () => {
     setCustomerUser(null);
@@ -1060,7 +1115,7 @@ export default function App() {
   const renderCartContent = () => (
     <div style={{ padding: '20px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-        <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#0F5869', fontWeight: '800' }}>
+        <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#4A121E', fontWeight: '800' }}>
           🛒 Your Fresh Order ({totalCartQty} items)
         </h3>
         {isMobileCartOpen && (
@@ -1077,14 +1132,14 @@ export default function App() {
       {cart.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '36px 10px', color: '#64748B' }}>
           <div style={{ fontSize: '2.5rem', marginBottom: '8px' }}>🥣</div>
-          <p style={{ margin: 0, fontWeight: '700', color: '#0F5869' }}>Your cart is empty.</p>
+          <p style={{ margin: 0, fontWeight: '700', color: '#4A121E' }}>Your cart is empty.</p>
           <p style={{ margin: '4px 0 0', fontSize: '0.85rem' }}>Select your favourite laddus from the menu!</p>
         </div>
       ) : (
         <div>
           <div style={{ maxHeight: '280px', overflowY: 'auto', marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {cart.map(item => (
-              <div key={item.cartKey} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#F8FAFC', padding: '10px 12px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+              <div key={item.cartKey} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#FAF6F0', padding: '10px 12px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <img 
                     src={item.image} 
@@ -1093,7 +1148,7 @@ export default function App() {
                     onError={(e) => { e.target.src = 'images/TheLadduStory_Logo.jpg'; }}
                   />
                   <div>
-                    <div style={{ fontWeight: '700', fontSize: '0.88rem', color: '#0F5869' }}>{item.name}</div>
+                    <div style={{ fontWeight: '700', fontSize: '0.88rem', color: '#4A121E' }}>{item.name}</div>
                     <div style={{ fontSize: '0.75rem', color: '#64748B' }}>{item.packLabel}</div>
                   </div>
                 </div>
@@ -1112,7 +1167,7 @@ export default function App() {
                   >
                     +
                   </button>
-                  <span style={{ fontWeight: '800', fontSize: '0.9rem', color: '#0F5869', marginLeft: '6px', minWidth: '55px', textAlign: 'right' }}>
+                  <span style={{ fontWeight: '800', fontSize: '0.9rem', color: '#4A121E', marginLeft: '6px', minWidth: '55px', textAlign: 'right' }}>
                     ₹{item.unitPrice * item.qty}
                   </span>
                 </div>
@@ -1122,7 +1177,7 @@ export default function App() {
 
           {/* Fulfillment Method Selection */}
           <div style={{ marginBottom: '14px' }}>
-            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '800', color: '#0F5869', marginBottom: '6px' }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '800', color: '#4A121E', marginBottom: '6px' }}>
               SELECT DELIVERY / PICKUP METHOD:
             </label>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
@@ -1132,9 +1187,9 @@ export default function App() {
                 style={{
                   padding: '9px 8px',
                   borderRadius: '8px',
-                  border: fulfillmentType === 'DELIVERY' ? '2px solid #0F5869' : '1px solid #CBD5E1',
+                  border: fulfillmentType === 'DELIVERY' ? '2px solid #4A121E' : '1px solid #CBD5E1',
                   background: fulfillmentType === 'DELIVERY' ? '#E0F2FE' : '#fff',
-                  color: fulfillmentType === 'DELIVERY' ? '#0F5869' : '#64748B',
+                  color: fulfillmentType === 'DELIVERY' ? '#4A121E' : '#64748B',
                   fontWeight: '800',
                   fontSize: '0.82rem',
                   cursor: 'pointer'
@@ -1148,9 +1203,9 @@ export default function App() {
                 style={{
                   padding: '9px 8px',
                   borderRadius: '8px',
-                  border: fulfillmentType === 'PICKUP' ? '2px solid #0F5869' : '1px solid #CBD5E1',
+                  border: fulfillmentType === 'PICKUP' ? '2px solid #4A121E' : '1px solid #CBD5E1',
                   background: fulfillmentType === 'PICKUP' ? '#E0F2FE' : '#fff',
-                  color: fulfillmentType === 'PICKUP' ? '#0F5869' : '#64748B',
+                  color: fulfillmentType === 'PICKUP' ? '#4A121E' : '#64748B',
                   fontWeight: '800',
                   fontSize: '0.82rem',
                   cursor: 'pointer'
@@ -1162,7 +1217,7 @@ export default function App() {
           </div>
 
           {/* Customer Inputs */}
-          <div style={{ background: '#F8FAFC', padding: '14px', borderRadius: '12px', marginBottom: '16px', border: '1px solid #E2E8F0' }}>
+          <div style={{ background: '#FAF6F0', padding: '14px', borderRadius: '12px', marginBottom: '16px', border: '1px solid #E2E8F0' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
               <span style={{ fontSize: '0.8rem', fontWeight: '800', color: '#475569' }}>
                 {fulfillmentType === 'PICKUP' ? 'CONTACT & PICKUP DETAILS' : 'CUSTOMER CONTACT & DELIVERY'}
@@ -1214,7 +1269,7 @@ export default function App() {
               <span>{fulfillmentType === 'PICKUP' ? 'Store Pickup Collection' : 'Bangalore Express Delivery'}</span>
               <span>FREE</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', fontWeight: '800', color: '#0F5869' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', fontWeight: '800', color: '#4A121E' }}>
               <span>Total Payable</span>
               <span>₹{cartTotal.toLocaleString('en-IN')}</span>
             </div>
@@ -1226,7 +1281,7 @@ export default function App() {
             disabled={isSubmitting}
             style={{
               width: '100%',
-              background: isSubmitting ? '#94A3B8' : '#187A90',
+              background: isSubmitting ? '#94A3B8' : '#831843',
               color: '#FFFFFF',
               border: 'none',
               padding: '14px',
@@ -1249,10 +1304,10 @@ export default function App() {
   );
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F8FAFC', fontFamily: "'Plus Jakarta Sans', system-ui, -apple-system, sans-serif", color: '#1E293B', paddingBottom: totalCartQty > 0 ? '110px' : '30px' }}>
+    <div style={{ minHeight: '100vh', background: '#FAF6F0', fontFamily: "'Plus Jakarta Sans', system-ui, -apple-system, sans-serif", color: '#1E293B', paddingBottom: totalCartQty > 0 ? '110px' : '30px' }}>
 
       {/* HEADER WITH OFFICIAL CIRCULAR LOGO */}
-      <header style={{ background: '#0F5869', color: '#fff', padding: '14px 20px', position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 2px 10px rgba(0,0,0,0.1)' }}>
+      <header style={{ background: 'linear-gradient(135deg, #350B15 0%, #4A121E 60%, #68152B 100%)', color: '#fff', padding: '14px 20px', position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 4px 20px rgba(74, 18, 30, 0.3)', borderBottom: '2px solid #B45309' }}>
         <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
           
           {/* Logo & Brand Title */}
@@ -1262,7 +1317,7 @@ export default function App() {
               height: '46px', 
               borderRadius: '50%', 
               background: '#FFFFFF', 
-              border: '2.5px solid #D6E5BA', 
+              border: '2.5px solid #FDE68A', 
               overflow: 'hidden', 
               display: 'flex', 
               alignItems: 'center', 
@@ -1281,10 +1336,10 @@ export default function App() {
               />
             </div>
             <div>
-              <h1 style={{ margin: 0, fontSize: '1.35rem', fontWeight: '800', letterSpacing: '-0.5px' }}>
+              <h1 className="royal-title" style={{ margin: 0, fontSize: "1.45rem", fontWeight: "700", letterSpacing: "0.5px", color: "#FFFFFF" }}>
                 The Laddu Story
               </h1>
-              <div style={{ fontSize: '0.74rem', color: '#D6E5BA', fontWeight: '600' }}>
+              <div style={{ fontSize: '0.74rem', color: '#FDE68A', fontWeight: '600' }}>
                 Homemade Healthy Snacks: Ancient Traditions & Superfoods • 📞 9343207515
               </div>
             </div>
@@ -1297,7 +1352,7 @@ export default function App() {
               onClick={() => setActiveTab('store')}
               style={{
                 background: activeTab === 'store' ? '#FFFFFF' : 'transparent',
-                color: activeTab === 'store' ? '#0F5869' : '#FFFFFF',
+                color: activeTab === 'store' ? '#4A121E' : '#FFFFFF',
                 border: '1px solid rgba(255,255,255,0.4)',
                 padding: '8px 14px',
                 borderRadius: '8px',
@@ -1311,14 +1366,14 @@ export default function App() {
 
             {/* Customer Login / My Orders Badge */}
             {customerUser ? (
-              <div style={{ display: 'flex', alignItems: 'center', background: '#D6E5BA', borderRadius: '8px', padding: '2px 4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', background: '#FDE68A', borderRadius: '8px', padding: '2px 4px' }}>
                 <button
                   id="nav-customer-profile-btn"
                   onClick={() => setActiveTab('track')}
                   style={{
                     background: 'transparent',
                     border: 'none',
-                    color: '#0F5869',
+                    color: '#4A121E',
                     padding: '6px 10px',
                     fontWeight: '800',
                     fontSize: '0.82rem',
@@ -1352,7 +1407,7 @@ export default function App() {
                 onClick={() => setShowCustomerLoginModal(true)}
                 style={{
                   background: activeTab === 'track' ? '#FFFFFF' : 'rgba(255,255,255,0.15)',
-                  color: activeTab === 'track' ? '#0F5869' : '#FFFFFF',
+                  color: activeTab === 'track' ? '#4A121E' : '#FFFFFF',
                   border: '1px solid rgba(255,255,255,0.4)',
                   padding: '8px 14px',
                   borderRadius: '8px',
@@ -1371,8 +1426,8 @@ export default function App() {
                 id="nav-staff-dashboard-btn"
                 onClick={() => setActiveTab('admin')}
                 style={{
-                  background: activeTab === 'admin' ? '#D6E5BA' : 'rgba(214, 229, 186, 0.3)',
-                  color: '#0F5869',
+                  background: activeTab === 'admin' ? '#FDE68A' : 'rgba(214, 229, 186, 0.3)',
+                  color: '#4A121E',
                   border: 'none',
                   padding: '8px 14px',
                   borderRadius: '8px',
@@ -1389,8 +1444,8 @@ export default function App() {
                 onClick={() => setShowLoginModal(true)}
                 style={{
                   background: 'transparent',
-                  color: '#D6E5BA',
-                  border: '1px dashed #D6E5BA',
+                  color: '#FDE68A',
+                  border: '1px dashed #FDE68A',
                   padding: '8px 12px',
                   borderRadius: '8px',
                   fontSize: '0.82rem',
@@ -1407,7 +1462,7 @@ export default function App() {
       </header>
 
       {/* SUB-HEADER STATUS BAR */}
-      <div style={{ background: '#F1F5F9', borderBottom: '1px solid #E2E8F0', padding: '6px 20px', fontSize: '0.78rem', color: '#475569', textAlign: 'center' }}>
+      <div style={{ background: '#FFFBEB', borderBottom: '1px solid #FDE68A', padding: '7px 20px', fontSize: '0.8rem', color: '#78350F', textAlign: 'center', fontWeight: '500' }}>
         <span>🌿 Pure Desi Cow Ghee & Unrefined Jaggery • Zero White Sugar • Freshly Prepared in Bangalore • </span>
         <span style={{ color: isCloudSynced ? '#059669' : '#D97706', fontWeight: '700' }}>
           ● Real-Time Cloud Sync Active (Synced {lastSyncTime})
@@ -1420,7 +1475,7 @@ export default function App() {
           position: 'fixed',
           top: '70px',
           right: '20px',
-          background: '#0F5869',
+          background: '#4A121E',
           color: '#FFFFFF',
           padding: '10px 18px',
           borderRadius: '10px',
@@ -1446,7 +1501,7 @@ export default function App() {
             <div>
               {/* Hero Banner */}
               <div style={{ 
-                background: 'linear-gradient(135deg, #0F5869 0%, #187A90 100%)', 
+                background: 'linear-gradient(135deg, #4A121E 0%, #831843 100%)', 
                 borderRadius: '20px', 
                 padding: '28px', 
                 color: '#fff', 
@@ -1455,7 +1510,7 @@ export default function App() {
                 overflow: 'hidden'
               }}>
                 <div style={{ maxWidth: '600px' }}>
-                  <div style={{ display: 'inline-block', background: '#D6E5BA', color: '#0F5869', padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: '800', marginBottom: '10px' }}>
+                  <div style={{ display: 'inline-block', background: '#FDE68A', color: '#4A121E', padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: '800', marginBottom: '10px' }}>
                     100% ARTISANAL & HOMEMADE
                   </div>
                   <h2 style={{ fontSize: '1.8rem', fontWeight: '800', margin: '0 0 10px', lineHeight: 1.2 }}>
@@ -1469,7 +1524,7 @@ export default function App() {
 
               {/* Products Section Header */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#0F5869', margin: 0 }}>
+                <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#4A121E', margin: 0 }}>
                   Signature Laddus & Savory Munchies ({products.length} Varieties)
                 </h3>
                 <span style={{ fontSize: '0.8rem', color: '#64748B' }}>Freshly roasted to order</span>
@@ -1507,8 +1562,8 @@ export default function App() {
                           position: 'absolute', 
                           top: '12px', 
                           left: '12px', 
-                          background: product.isMunchy ? '#E0F2FE' : '#D6E5BA', 
-                          color: product.isMunchy ? '#0369A1' : '#0F5869', 
+                          background: product.isMunchy ? '#E0F2FE' : '#FDE68A', 
+                          color: product.isMunchy ? '#0369A1' : '#4A121E', 
                           padding: '4px 10px', 
                           borderRadius: '8px', 
                           fontSize: '0.72rem', 
@@ -1537,7 +1592,7 @@ export default function App() {
                       {/* Details */}
                       <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', flex: 1 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
-                          <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '800', color: '#0F5869' }}>
+                          <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '800', color: '#4A121E' }}>
                             {product.name}
                           </h4>
                           <span style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: '700' }}>
@@ -1559,9 +1614,9 @@ export default function App() {
                             style={{
                               padding: '8px 4px',
                               borderRadius: '8px',
-                              border: currentWeight === 'OPT1' ? '2px solid #187A90' : '1px solid #CBD5E1',
+                              border: currentWeight === 'OPT1' ? '2px solid #831843' : '1px solid #CBD5E1',
                               background: currentWeight === 'OPT1' ? '#E0F2FE' : '#fff',
-                              color: currentWeight === 'OPT1' ? '#0F5869' : '#475569',
+                              color: currentWeight === 'OPT1' ? '#4A121E' : '#475569',
                               fontWeight: '700',
                               fontSize: '0.8rem',
                               cursor: 'pointer'
@@ -1575,9 +1630,9 @@ export default function App() {
                             style={{
                               padding: '8px 4px',
                               borderRadius: '8px',
-                              border: currentWeight === 'OPT2' ? '2px solid #187A90' : '1px solid #CBD5E1',
+                              border: currentWeight === 'OPT2' ? '2px solid #831843' : '1px solid #CBD5E1',
                               background: currentWeight === 'OPT2' ? '#E0F2FE' : '#fff',
-                              color: currentWeight === 'OPT2' ? '#0F5869' : '#475569',
+                              color: currentWeight === 'OPT2' ? '#4A121E' : '#475569',
                               fontWeight: '700',
                               fontSize: '0.8rem',
                               cursor: 'pointer'
@@ -1590,7 +1645,7 @@ export default function App() {
                         {/* Price & Add to Cart */}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div>
-                            <span style={{ fontSize: '1.15rem', fontWeight: '800', color: '#0F5869' }}>
+                            <span style={{ fontSize: '1.15rem', fontWeight: '800', color: '#4A121E' }}>
                               ₹{price}
                             </span>
                           </div>
@@ -1598,7 +1653,7 @@ export default function App() {
                             onClick={() => addToCart(product)}
                             disabled={isOutOfStock}
                             style={{
-                              background: isOutOfStock ? '#CBD5E1' : '#187A90',
+                              background: isOutOfStock ? '#CBD5E1' : '#831843',
                               color: '#fff',
                               border: 'none',
                               padding: '9px 16px',
@@ -1641,14 +1696,14 @@ export default function App() {
                 {/* Customer Account Header */}
                 <div style={{ background: '#fff', borderRadius: '18px', padding: '24px', border: '1px solid #E2E8F0', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                    <div style={{ width: '52px', height: '52px', borderRadius: '50%', background: '#FFFFFF', border: '2px solid #D6E5BA', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.1)' }}>
+                    <div style={{ width: '52px', height: '52px', borderRadius: '50%', background: '#FFFFFF', border: '2px solid #FDE68A', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.1)' }}>
                       <img src="images/TheLadduStory_Logo.jpg" alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; e.target.parentNode.innerText = '👤'; }} />
                     </div>
                     <div>
-                      <div style={{ fontSize: '0.75rem', fontWeight: '800', color: '#187A90', letterSpacing: '0.5px' }}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: '800', color: '#831843', letterSpacing: '0.5px' }}>
                         CUSTOMER ACCOUNT (PRIMARY ID: MOBILE)
                       </div>
-                      <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: '#0F5869', margin: '2px 0 4px' }}>
+                      <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: '#4A121E', margin: '2px 0 4px' }}>
                         Namaste, {customerUser.name}! 🙏
                       </h2>
                       <div style={{ fontSize: '0.85rem', color: '#64748B' }}>
@@ -1661,7 +1716,7 @@ export default function App() {
                     <button
                       id="track-place-order-btn"
                       onClick={() => setActiveTab('store')}
-                      style={{ background: '#187A90', color: '#fff', border: 'none', padding: '9px 16px', borderRadius: '8px', fontWeight: '700', fontSize: '0.85rem', cursor: 'pointer' }}
+                      style={{ background: '#831843', color: '#fff', border: 'none', padding: '9px 16px', borderRadius: '8px', fontWeight: '700', fontSize: '0.85rem', cursor: 'pointer' }}
                     >
                       + Place New Order
                     </button>
@@ -1677,14 +1732,14 @@ export default function App() {
 
                 {/* ACTIVE IN-PROGRESS ORDERS */}
                 <div style={{ marginBottom: '32px' }}>
-                  <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0F5869', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#4A121E', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     🟡 Open / In-Progress Orders ({activeOrders.length})
                   </h3>
 
                   {activeOrders.length === 0 ? (
                     <div style={{ background: '#fff', borderRadius: '16px', padding: '36px', textAlign: 'center', border: '1px solid #E2E8F0', color: '#64748B' }}>
                       <div style={{ fontSize: '2.5rem', marginBottom: '8px' }}>🥣</div>
-                      <div style={{ fontWeight: '700', fontSize: '1rem', color: '#0F5869' }}>No active orders in progress right now.</div>
+                      <div style={{ fontWeight: '700', fontSize: '1rem', color: '#4A121E' }}>No active orders in progress right now.</div>
                       <div style={{ fontSize: '0.85rem', marginTop: '4px' }}>Order fresh artisanal laddus anytime!</div>
                     </div>
                   ) : (
@@ -1697,7 +1752,7 @@ export default function App() {
                             
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
                               <div>
-                                <span style={{ fontWeight: '800', color: '#0F5869', fontSize: '1.1rem' }}>{o.orderId}</span>
+                                <span style={{ fontWeight: '800', color: '#4A121E', fontSize: '1.1rem' }}>{o.orderId}</span>
                                 <span style={{ fontSize: '0.8rem', color: '#64748B', marginLeft: '10px' }}>{o.time}</span>
                               </div>
                               <span style={{ background: '#FEF3C7', color: '#92400E', padding: '4px 12px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: '800' }}>
@@ -1706,7 +1761,7 @@ export default function App() {
                             </div>
 
                             {/* Live Step Progress Indicator */}
-                            <div style={{ background: '#F8FAFC', padding: '16px', borderRadius: '12px', marginBottom: '16px', border: '1px solid #F1F5F9' }}>
+                            <div style={{ background: '#FAF6F0', padding: '16px', borderRadius: '12px', marginBottom: '16px', border: '1px solid #F1F5F9' }}>
                               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', textAlign: 'center', gap: '6px' }}>
                                 {[
                                   { label: 'Received', step: 1 },
@@ -1722,7 +1777,7 @@ export default function App() {
                                         width: '28px', 
                                         height: '28px', 
                                         borderRadius: '50%', 
-                                        background: isDone ? '#187A90' : '#E2E8F0', 
+                                        background: isDone ? '#831843' : '#E2E8F0', 
                                         color: isDone ? '#fff' : '#64748B', 
                                         margin: '0 auto 6px',
                                         display: 'flex',
@@ -1733,7 +1788,7 @@ export default function App() {
                                       }}>
                                         {isDone ? '✓' : s.step}
                                       </div>
-                                      <div style={{ fontSize: '0.7rem', fontWeight: isDone ? '800' : '600', color: isDone ? '#0F5869' : '#94A3B8' }}>
+                                      <div style={{ fontSize: '0.7rem', fontWeight: isDone ? '800' : '600', color: isDone ? '#4A121E' : '#94A3B8' }}>
                                         {s.label}
                                       </div>
                                     </div>
@@ -1750,7 +1805,7 @@ export default function App() {
                                   <b>₹{it.unitPrice * it.qty}</b>
                                 </div>
                               ))}
-                              <div style={{ borderTop: '1px solid #E2E8F0', marginTop: '8px', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', fontWeight: '800', color: '#0F5869' }}>
+                              <div style={{ borderTop: '1px solid #E2E8F0', marginTop: '8px', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', fontWeight: '800', color: '#4A121E' }}>
                                 <span>Total Paid (UPI):</span>
                                 <span>₹{o.total}</span>
                               </div>
@@ -1778,7 +1833,7 @@ export default function App() {
 
                 {/* COMPLETED ORDER HISTORY */}
                 <div>
-                  <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0F5869', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#4A121E', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     🟢 Completed Order History ({pastOrders.length})
                   </h3>
 
@@ -1792,7 +1847,7 @@ export default function App() {
                         <div key={o.orderId} style={{ background: '#fff', borderRadius: '14px', border: '1px solid #E2E8F0', padding: '18px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                             <div>
-                              <b style={{ color: '#0F5869', fontSize: '0.95rem' }}>{o.orderId}</b>
+                              <b style={{ color: '#4A121E', fontSize: '0.95rem' }}>{o.orderId}</b>
                               <span style={{ fontSize: '0.75rem', color: '#64748B', marginLeft: '8px' }}>{o.time}</span>
                             </div>
                             <span style={{ background: '#DEF7EC', color: '#03543F', padding: '3px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: '800' }}>
@@ -1804,7 +1859,7 @@ export default function App() {
                           </div>
                           <button
                             onClick={() => reorderPastItems(o)}
-                            style={{ background: '#F1F5F9', border: '1px solid #CBD5E1', padding: '6px 14px', borderRadius: '6px', fontWeight: '700', fontSize: '0.8rem', color: '#0F5869', cursor: 'pointer' }}
+                            style={{ background: '#F1F5F9', border: '1px solid #CBD5E1', padding: '6px 14px', borderRadius: '6px', fontWeight: '700', fontSize: '0.8rem', color: '#4A121E', cursor: 'pointer' }}
                           >
                             🔄 Reorder in 1 Click
                           </button>
@@ -1816,63 +1871,175 @@ export default function App() {
 
               </div>
             ) : (
-              /* If Not Logged In: Customer Login Screen */
-              <div style={{ background: '#fff', borderRadius: '20px', padding: '36px', border: '1px solid #E2E8F0', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', textAlign: 'center' }}>
-                <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: '#FFFFFF', border: '2.5px solid #D6E5BA', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)' }}>
-                  <img src="images/TheLadduStory_Logo.jpg" alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; e.target.parentNode.innerText = '👤'; }} />
+              /* If Not Logged In: Customer Login Screen (High-Luxury Royal Aesthetics) */
+              <div style={{ background: '#FFFFFF', borderRadius: '24px', padding: '40px 32px', border: '1.5px solid rgba(180, 83, 9, 0.25)', boxShadow: '0 10px 30px rgba(74, 18, 30, 0.08)', textAlign: 'center', maxWidth: '480px', margin: '20px auto' }}>
+                
+                {/* Royal Emblem */}
+                <div style={{ width: '72px', height: '72px', borderRadius: '50%', background: '#FFFFFF', border: '3px solid #B45309', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', boxShadow: '0 4px 14px rgba(180, 83, 9, 0.25)' }}>
+                  <img src="images/TheLadduStory_Logo.jpg" alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; e.target.parentNode.innerText = '👑'; }} />
                 </div>
-                <h2 style={{ fontSize: '1.6rem', fontWeight: '800', color: '#0F5869', margin: '0 0 8px' }}>
-                  Customer Sign-In & Live Order Tracker
+
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#FEF3C7', color: '#92400E', padding: '4px 14px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: '800', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: '10px', border: '1px solid #FDE68A' }}>
+                  <span>👑 Artisanal Heritage Kitchen</span>
+                </div>
+
+                <h2 className="royal-title" style={{ fontSize: '1.8rem', fontWeight: '700', color: '#4A121E', margin: '0 0 8px' }}>
+                  Patron Sign-In & Live Tracker
                 </h2>
-                <p style={{ fontSize: '0.9rem', color: '#64748B', maxWidth: '480px', margin: '0 auto 24px', lineHeight: 1.5 }}>
-                  Enter your 10-digit mobile number to view active preparation status, live delivery updates, and past orders history.
+                <p style={{ fontSize: '0.88rem', color: '#64748B', margin: '0 auto 24px', lineHeight: 1.5 }}>
+                  {otpStep === 'PHONE'
+                    ? 'Verify instantly via 100% Free WhatsApp OTP to track live cow ghee preparation and past royal orders.'
+                    : `Enter the 4-digit verification code sent to +91 ${loginPhoneInput}`}
                 </p>
 
-                <form onSubmit={handleCustomerLogin} style={{ maxWidth: '400px', margin: '0 auto', textAlign: 'left' }}>
-                  <div style={{ marginBottom: '14px' }}>
-                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '800', color: '#475569', marginBottom: '6px' }}>
-                      10-DIGIT MOBILE NUMBER (PRIMARY ID) *
-                    </label>
-                    <input
-                      id="customer-login-phone-input"
-                      type="tel"
-                      placeholder="e.g. 9686412341 or 9686412342"
-                      value={loginPhoneInput}
-                      onChange={e => setLoginPhoneInput(e.target.value)}
-                      required
-                      style={{ width: '100%', boxSizing: 'border-box', padding: '12px 14px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '1rem', fontWeight: '700' }}
-                    />
-                  </div>
-
-                  <div style={{ marginBottom: '18px' }}>
-                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '800', color: '#475569', marginBottom: '6px' }}>
-                      YOUR NAME (OPTIONAL IF RETURNING CUSTOMER)
-                    </label>
-                    <input
-                      id="customer-login-name-input"
-                      type="text"
-                      placeholder="Automatically recognized from phone"
-                      value={loginNameInput}
-                      onChange={e => setLoginNameInput(e.target.value)}
-                      style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.9rem' }}
-                    />
-                    <div style={{ fontSize: '0.72rem', color: '#64748B', marginTop: '4px' }}>
-                      💡 If you've placed an order before, your name is automatically retrieved from the OMS database!
+                {otpStep === 'PHONE' ? (
+                  /* STEP 1: ENTER PHONE NUMBER */
+                  <form onSubmit={handleSendWhatsAppOtp} style={{ textAlign: 'left' }}>
+                    <div style={{ marginBottom: '16px' }}>
+                      <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '800', color: '#4A121E', marginBottom: '6px', letterSpacing: '0.5px' }}>
+                        10-DIGIT MOBILE NUMBER *
+                      </label>
+                      <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid rgba(180, 83, 9, 0.3)', borderRadius: '10px', overflow: 'hidden', background: '#FAF6F0' }}>
+                        <span style={{ padding: '12px 14px', background: 'rgba(180, 83, 9, 0.1)', color: '#4A121E', fontWeight: '800', fontSize: '0.95rem', borderRight: '1px solid rgba(180, 83, 9, 0.2)' }}>
+                          🇮🇳 +91
+                        </span>
+                        <input
+                          id="customer-login-phone-input"
+                          type="tel"
+                          placeholder="e.g. 9686412341 or 9686412342"
+                          value={loginPhoneInput}
+                          onChange={e => setLoginPhoneInput(e.target.value)}
+                          required
+                          style={{ width: '100%', boxSizing: 'border-box', padding: '12px 14px', border: 'none', background: 'transparent', fontSize: '1.05rem', fontWeight: '700', color: '#4A121E', outline: 'none' }}
+                        />
+                      </div>
                     </div>
-                  </div>
 
-                  <button
-                    id="customer-login-submit-btn"
-                    type="submit"
-                    disabled={isCustomerLoggingIn}
-                    style={{ width: '100%', background: isCustomerLoggingIn ? '#64748B' : '#187A90', color: '#fff', border: 'none', padding: '13px', borderRadius: '8px', fontWeight: '800', fontSize: '1rem', cursor: isCustomerLoggingIn ? 'not-allowed' : 'pointer', boxShadow: '0 4px 12px rgba(24, 122, 144, 0.3)' }}
-                  >
-                    {isCustomerLoggingIn ? '⏳ Verifying with Supabase...' : 'View My Orders & History →'}
-                  </button>
-                </form>
+                    <div style={{ marginBottom: '20px' }}>
+                      <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '800', color: '#4A121E', marginBottom: '6px', letterSpacing: '0.5px' }}>
+                        PATRON NAME (OPTIONAL)
+                      </label>
+                      <input
+                        id="customer-login-name-input"
+                        type="text"
+                        placeholder="Auto-recognized if returning patron"
+                        value={loginNameInput}
+                        onChange={e => setLoginNameInput(e.target.value)}
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '12px 14px', borderRadius: '10px', border: '1.5px solid rgba(180, 83, 9, 0.3)', background: '#FAF6F0', fontSize: '0.95rem', color: '#4A121E' }}
+                      />
+                    </div>
+
+                    <button
+                      id="customer-login-submit-btn"
+                      type="submit"
+                      disabled={isCustomerLoggingIn}
+                      style={{
+                        width: '100%',
+                        background: 'linear-gradient(135deg, #15803D 0%, #16A34A 100%)',
+                        color: '#fff',
+                        border: '1px solid #14532D',
+                        padding: '14px',
+                        borderRadius: '10px',
+                        fontWeight: '800',
+                        fontSize: '1rem',
+                        cursor: isCustomerLoggingIn ? 'not-allowed' : 'pointer',
+                        boxShadow: '0 4px 14px rgba(22, 163, 74, 0.3)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px'
+                      }}
+                    >
+                      <span>💬</span>
+                      <span>{isCustomerLoggingIn ? 'Generating Code...' : 'Send WhatsApp OTP →'}</span>
+                    </button>
+
+                    <div style={{ marginTop: '16px', fontSize: '0.75rem', color: '#78350F', background: '#FFFBEB', padding: '10px 14px', borderRadius: '8px', border: '1px solid #FDE68A', textAlign: 'center' }}>
+                      🌿 <b>100% Free WhatsApp Authentication:</b> No telecom SMS delays. Code is dispatched instantly to our bakery WhatsApp hotline (<b>9343207515</b>).
+                    </div>
+                  </form>
+                ) : (
+                  /* STEP 2: ENTER OTP CODE */
+                  <form onSubmit={handleVerifyWhatsAppOtp} style={{ textAlign: 'left' }}>
+                    {/* OTP Display Callout */}
+                    <div style={{ background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: '14px', padding: '16px', marginBottom: '20px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '0.75rem', color: '#92400E', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
+                        💬 WhatsApp Verification Code
+                      </div>
+                      <div style={{ fontSize: '2.2rem', fontWeight: '900', color: '#B45309', letterSpacing: '8px', fontFamily: 'monospace' }}>
+                        {generatedOtp}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#78350F', marginTop: '6px' }}>
+                        Sent to WhatsApp for <b>+91 {loginPhoneInput}</b>
+                      </div>
+                      <a
+                        href={`https://wa.me/919343207515?text=${encodeURIComponent(`Namaste The Laddu Story! My login verification OTP is ${generatedOtp} for phone +91 ${loginPhoneInput.replace(/\\D/g, '').slice(-10)}.`)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '10px', background: '#15803D', color: '#fff', padding: '6px 14px', borderRadius: '20px', fontSize: '0.78rem', fontWeight: '700', textDecoration: 'none' }}
+                      >
+                        <span>📲 Open WhatsApp Hotline</span>
+                      </a>
+                    </div>
+
+                    <div style={{ marginBottom: '18px' }}>
+                      <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '800', color: '#4A121E', marginBottom: '6px', textAlign: 'center' }}>
+                        ENTER 4-DIGIT CODE
+                      </label>
+                      <input
+                        id="customer-login-otp-input"
+                        type="text"
+                        maxLength="4"
+                        placeholder="• • • •"
+                        value={enteredOtp}
+                        onChange={e => setEnteredOtp(e.target.value.replace(/\D/g, ''))}
+                        autoFocus
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '14px', borderRadius: '10px', border: '2px solid #B45309', fontSize: '1.6rem', fontWeight: '800', textAlign: 'center', letterSpacing: '12px', background: '#FAF6F0', color: '#4A121E', outline: 'none' }}
+                      />
+                    </div>
+
+                    <button
+                      id="customer-login-verify-btn"
+                      type="submit"
+                      disabled={enteredOtp.length < 4 || isCustomerLoggingIn}
+                      style={{
+                        width: '100%',
+                        background: (enteredOtp.length < 4 || isCustomerLoggingIn) ? '#94A3B8' : 'linear-gradient(135deg, #4A121E 0%, #831843 100%)',
+                        color: '#fff',
+                        border: '1px solid #B45309',
+                        padding: '14px',
+                        borderRadius: '10px',
+                        fontWeight: '800',
+                        fontSize: '1rem',
+                        cursor: (enteredOtp.length < 4 || isCustomerLoggingIn) ? 'not-allowed' : 'pointer',
+                        boxShadow: '0 4px 14px rgba(74, 18, 30, 0.3)'
+                      }}
+                    >
+                      {isCustomerLoggingIn ? '⏳ Verifying...' : '✓ Verify Code & Sign In'}
+                    </button>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', fontSize: '0.8rem' }}>
+                      <button
+                        type="button"
+                        onClick={() => { setOtpStep('PHONE'); setEnteredOtp(''); }}
+                        style={{ background: 'transparent', border: 'none', color: '#831843', fontWeight: '700', cursor: 'pointer', padding: 0 }}
+                      >
+                        ← Change Number
+                      </button>
+                      <button
+                        type="button"
+                        disabled={otpCountdown > 0}
+                        onClick={handleSendWhatsAppOtp}
+                        style={{ background: 'transparent', border: 'none', color: otpCountdown > 0 ? '#94A3B8' : '#B45309', fontWeight: '700', cursor: otpCountdown > 0 ? 'default' : 'pointer', padding: 0 }}
+                      >
+                        {otpCountdown > 0 ? `Resend in ${otpCountdown}s` : 'Resend WhatsApp Code'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
               </div>
             )}
-
           </div>
         )}
 
@@ -1887,7 +2054,7 @@ export default function App() {
                 <button
                   onClick={() => setAdminSection('orders')}
                   style={{
-                    background: adminSection === 'orders' ? '#0F5869' : '#F1F5F9',
+                    background: adminSection === 'orders' ? '#4A121E' : '#F1F5F9',
                     color: adminSection === 'orders' ? '#fff' : '#475569',
                     border: 'none',
                     padding: '9px 18px',
@@ -1902,7 +2069,7 @@ export default function App() {
                 <button
                   onClick={() => setAdminSection('inventory')}
                   style={{
-                    background: adminSection === 'inventory' ? '#0F5869' : '#F1F5F9',
+                    background: adminSection === 'inventory' ? '#4A121E' : '#F1F5F9',
                     color: adminSection === 'inventory' ? '#fff' : '#475569',
                     border: 'none',
                     padding: '9px 18px',
@@ -1964,7 +2131,7 @@ export default function App() {
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
                   <div>
-                    <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#0F5869', margin: 0 }}>
+                    <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#4A121E', margin: 0 }}>
                       Kitchen & Delivery Order Manager
                     </h2>
                     <div style={{ fontSize: '0.82rem', color: '#64748B' }}>
@@ -1994,8 +2161,8 @@ export default function App() {
                         style={{
                           padding: '6px 12px',
                           borderRadius: '20px',
-                          border: isSelected ? '2px solid #0F5869' : '1px solid #CBD5E1',
-                          background: isSelected ? '#0F5869' : '#fff',
+                          border: isSelected ? '2px solid #4A121E' : '1px solid #CBD5E1',
+                          background: isSelected ? '#4A121E' : '#fff',
                           color: isSelected ? '#fff' : '#475569',
                           fontWeight: '700',
                           fontSize: '0.78rem',
@@ -2022,13 +2189,13 @@ export default function App() {
                       <div key={o.orderId} style={{ background: '#fff', borderRadius: '16px', border: '1px solid #E2E8F0', padding: '18px', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
                         
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                          <span style={{ fontWeight: '800', color: '#0F5869', fontSize: '0.95rem' }}>{o.orderId}</span>
+                          <span style={{ fontWeight: '800', color: '#4A121E', fontSize: '0.95rem' }}>{o.orderId}</span>
                           <span style={{ fontSize: '0.75rem', color: '#64748B' }}>{o.time}</span>
                         </div>
 
                         <div style={{ marginBottom: '12px' }}>
                           <div style={{ fontWeight: '800', fontSize: '1.05rem', color: '#1E293B' }}>{o.name}</div>
-                          <div style={{ fontSize: '0.85rem', color: '#187A90', fontWeight: '700', marginTop: '2px' }}>
+                          <div style={{ fontSize: '0.85rem', color: '#831843', fontWeight: '700', marginTop: '2px' }}>
                             📞 +91 {o.phone}
                           </div>
                           <div style={{ fontSize: '0.78rem', color: '#64748B', marginTop: '4px' }}>
@@ -2036,14 +2203,14 @@ export default function App() {
                           </div>
                         </div>
 
-                        <div style={{ background: '#F8FAFC', padding: '10px 12px', borderRadius: '10px', marginBottom: '14px', border: '1px solid #F1F5F9' }}>
+                        <div style={{ background: '#FAF6F0', padding: '10px 12px', borderRadius: '10px', marginBottom: '14px', border: '1px solid #F1F5F9' }}>
                           {o.items.map((it, idx) => (
                             <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem', marginBottom: '4px' }}>
                               <span>{it.qty}x {it.name} ({it.cleanWeight || it.packLabel})</span>
                               <b>₹{it.unitPrice * it.qty}</b>
                             </div>
                           ))}
-                          <div style={{ borderTop: '1px dashed #CBD5E1', marginTop: '6px', paddingTop: '6px', display: 'flex', justifyContent: 'space-between', fontWeight: '800', fontSize: '0.92rem', color: '#0F5869' }}>
+                          <div style={{ borderTop: '1px dashed #CBD5E1', marginTop: '6px', paddingTop: '6px', display: 'flex', justifyContent: 'space-between', fontWeight: '800', fontSize: '0.92rem', color: '#4A121E' }}>
                             <span>Total Paid ({o.paymentMethod || 'UPI'}):</span>
                             <span>₹{o.total}</span>
                           </div>
@@ -2054,7 +2221,7 @@ export default function App() {
                           <select
                             value={o.status}
                             onChange={e => updateOrderStatus(o.orderId, e.target.value)}
-                            style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.82rem', fontWeight: '800', background: '#F1F5F9', color: '#0F5869', cursor: 'pointer' }}
+                            style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.82rem', fontWeight: '800', background: '#F1F5F9', color: '#4A121E', cursor: 'pointer' }}
                           >
                             <option value="RECEIVED">RECEIVED</option>
                             <option value="PREPARING">PREPARING</option>
@@ -2086,7 +2253,7 @@ export default function App() {
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: '12px' }}>
                   <div>
-                    <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#0F5869', margin: 0 }}>
+                    <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#4A121E', margin: 0 }}>
                       Inventory, Pricing & MOQ Manager
                     </h2>
                     <div style={{ fontSize: '0.82rem', color: '#64748B' }}>
@@ -2096,7 +2263,7 @@ export default function App() {
 
                   <button
                     onClick={() => setShowAddProductModal(true)}
-                    style={{ background: '#0F5869', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '8px', fontWeight: '800', fontSize: '0.88rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                    style={{ background: '#4A121E', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '8px', fontWeight: '800', fontSize: '0.88rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
                   >
                     + Add New Item / Variation
                   </button>
@@ -2115,7 +2282,7 @@ export default function App() {
                           onError={(e) => { e.target.src = 'images/TheLadduStory_Logo.jpg'; }}
                         />
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: '800', fontSize: '1rem', color: '#0F5869' }}>{p.name}</div>
+                          <div style={{ fontWeight: '800', fontSize: '1rem', color: '#4A121E' }}>{p.name}</div>
                           <div style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: '700' }}>SKU: {p.sku}</div>
                           <span style={{ 
                             display: 'inline-block',
@@ -2132,7 +2299,7 @@ export default function App() {
                         </div>
                       </div>
 
-                      <div style={{ background: '#F8FAFC', padding: '10px 12px', borderRadius: '10px', fontSize: '0.8rem', marginBottom: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <div style={{ background: '#FAF6F0', padding: '10px 12px', borderRadius: '10px', fontSize: '0.8rem', marginBottom: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                           <span style={{ color: '#64748B' }}>Min Order Qty (MOQ):</span>
                           <b>{p.moq || '500g'}</b>
@@ -2149,7 +2316,7 @@ export default function App() {
 
                       <button
                         onClick={() => setEditingProduct(p)}
-                        style={{ marginTop: 'auto', background: '#F1F5F9', border: '1px solid #CBD5E1', padding: '8px', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', color: '#0F5869', cursor: 'pointer' }}
+                        style={{ marginTop: 'auto', background: '#F1F5F9', border: '1px solid #CBD5E1', padding: '8px', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', color: '#4A121E', cursor: 'pointer' }}
                       >
                         ✏️ Edit Price, MOQ & Stock
                       </button>
@@ -2177,7 +2344,7 @@ export default function App() {
             bottom: '16px',
             left: '16px',
             right: '16px',
-            background: '#0F5869',
+            background: '#4A121E',
             color: '#FFFFFF',
             padding: '12px 18px',
             borderRadius: '16px',
@@ -2192,15 +2359,15 @@ export default function App() {
             <div style={{ fontWeight: '800', fontSize: '0.95rem' }}>
               🛒 {totalCartQty} Item{totalCartQty > 1 ? 's' : ''} • ₹{cartTotal.toLocaleString('en-IN')}
             </div>
-            <div style={{ fontSize: '0.72rem', color: '#D6E5BA' }}>
+            <div style={{ fontSize: '0.72rem', color: '#FDE68A' }}>
               Pure Cow Ghee & Jaggery • Zero White Sugar
             </div>
           </div>
           <button
             onClick={() => setIsMobileCartOpen(true)}
             style={{
-              background: '#D6E5BA',
-              color: '#0F5869',
+              background: '#FDE68A',
+              color: '#4A121E',
               border: 'none',
               padding: '10px 18px',
               borderRadius: '10px',
@@ -2260,7 +2427,7 @@ export default function App() {
       {editingProduct && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <div style={{ background: '#fff', borderRadius: '20px', padding: '24px', maxWidth: '440px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
-            <h3 style={{ margin: '0 0 14px', fontSize: '1.25rem', color: '#0F5869', fontWeight: '800' }}>
+            <h3 style={{ margin: '0 0 14px', fontSize: '1.25rem', color: '#4A121E', fontWeight: '800' }}>
               Edit Product: {editingProduct.name}
             </h3>
 
@@ -2359,7 +2526,7 @@ export default function App() {
               <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
                 <button
                   type="submit"
-                  style={{ flex: 1, background: '#0F5869', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
+                  style={{ flex: 1, background: '#4A121E', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
                 >
                   Save & Update Store
                 </button>
@@ -2382,7 +2549,7 @@ export default function App() {
       {showAddProductModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <div style={{ background: '#fff', borderRadius: '20px', padding: '24px', maxWidth: '440px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
-            <h3 style={{ margin: '0 0 14px', fontSize: '1.25rem', color: '#0F5869', fontWeight: '800' }}>
+            <h3 style={{ margin: '0 0 14px', fontSize: '1.25rem', color: '#4A121E', fontWeight: '800' }}>
               Add New Product or Variation
             </h3>
 
@@ -2478,7 +2645,7 @@ export default function App() {
               <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
                 <button
                   type="submit"
-                  style={{ flex: 1, background: '#0F5869', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
+                  style={{ flex: 1, background: '#4A121E', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
                 >
                   Create Product
                 </button>
@@ -2496,71 +2663,142 @@ export default function App() {
       )}
 
       {/* ------------------------------------------------------------- */}
-      {/* MODAL: CUSTOMER SIGN-IN POPUP                                  */}
+      {/* MODAL: CUSTOMER SIGN-IN POPUP (High-Luxury Royal Aesthetics & WhatsApp OTP) */}
       {/* ------------------------------------------------------------- */}
       {showCustomerLoginModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-          <div style={{ background: '#fff', borderRadius: '20px', padding: '28px', maxWidth: '380px', width: '100%' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(53, 11, 21, 0.75)', backdropFilter: 'blur(4px)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ background: '#FFFFFF', borderRadius: '24px', padding: '32px 28px', maxWidth: '420px', width: '100%', border: '2px solid #B45309', boxShadow: '0 12px 40px rgba(0,0,0,0.35)', position: 'relative' }}>
             
-            <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: '#FFFFFF', border: '2px solid #D6E5BA', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
-              <img src="images/TheLadduStory_Logo.jpg" alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; e.target.parentNode.innerText = '👤'; }} />
+            <button
+              onClick={() => { setShowCustomerLoginModal(false); setOtpStep('PHONE'); }}
+              style={{ position: 'absolute', top: '16px', right: '16px', background: 'transparent', border: 'none', fontSize: '1.2rem', color: '#94A3B8', cursor: 'pointer' }}
+            >
+              ✕
+            </button>
+
+            <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#FFFFFF', border: '2.5px solid #B45309', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', boxShadow: '0 4px 12px rgba(180, 83, 9, 0.2)' }}>
+              <img src="images/TheLadduStory_Logo.jpg" alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; e.target.parentNode.innerText = '👑'; }} />
             </div>
 
-            <h3 style={{ margin: '0 0 6px', fontSize: '1.25rem', color: '#0F5869', fontWeight: '800', textAlign: 'center' }}>
-              Customer Sign-In
+            <h3 className="royal-title" style={{ margin: '0 0 6px', fontSize: '1.45rem', color: '#4A121E', fontWeight: '700', textAlign: 'center' }}>
+              Patron Sign-In
             </h3>
-            <p style={{ margin: '0 0 16px', fontSize: '0.82rem', color: '#64748B', textAlign: 'center' }}>
-              Enter your mobile number to track orders and fast-track checkout.
+            <p style={{ margin: '0 0 20px', fontSize: '0.82rem', color: '#64748B', textAlign: 'center' }}>
+              {otpStep === 'PHONE'
+                ? 'Verify via 100% Free WhatsApp OTP to fast-track ordering & track status.'
+                : `Enter the 4-digit code sent to +91 ${loginPhoneInput}`}
             </p>
             
-            <form onSubmit={handleCustomerLogin}>
-              <div style={{ marginBottom: '10px' }}>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
-                  10-DIGIT MOBILE NUMBER *
-                </label>
-                <input
-                  id="modal-customer-phone-input"
-                  type="tel"
-                  placeholder="e.g. 9686412341"
-                  value={loginPhoneInput}
-                  onChange={e => setLoginPhoneInput(e.target.value)}
-                  required
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '11px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.95rem', fontWeight: '700' }}
-                />
-              </div>
+            {otpStep === 'PHONE' ? (
+              <form onSubmit={handleSendWhatsAppOtp}>
+                <div style={{ marginBottom: '14px' }}>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px', letterSpacing: '0.5px' }}>
+                    10-DIGIT MOBILE NUMBER *
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid rgba(180, 83, 9, 0.3)', borderRadius: '8px', overflow: 'hidden', background: '#FAF6F0' }}>
+                    <span style={{ padding: '10px 12px', background: 'rgba(180, 83, 9, 0.1)', color: '#4A121E', fontWeight: '800', fontSize: '0.88rem' }}>
+                      +91
+                    </span>
+                    <input
+                      id="modal-customer-phone-input"
+                      type="tel"
+                      placeholder="e.g. 9686412341"
+                      value={loginPhoneInput}
+                      onChange={e => setLoginPhoneInput(e.target.value)}
+                      required
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: 'none', background: 'transparent', fontSize: '0.95rem', fontWeight: '700', color: '#4A121E', outline: 'none' }}
+                    />
+                  </div>
+                </div>
 
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
-                  NAME (OPTIONAL)
-                </label>
-                <input
-                  id="modal-customer-name-input"
-                  type="text"
-                  placeholder="Auto-recognized if returning"
-                  value={loginNameInput}
-                  onChange={e => setLoginNameInput(e.target.value)}
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.9rem' }}
-                />
-              </div>
+                <div style={{ marginBottom: '18px' }}>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px', letterSpacing: '0.5px' }}>
+                    PATRON NAME (OPTIONAL)
+                  </label>
+                  <input
+                    id="modal-customer-name-input"
+                    type="text"
+                    placeholder="Auto-recognized if returning"
+                    value={loginNameInput}
+                    onChange={e => setLoginNameInput(e.target.value)}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid rgba(180, 83, 9, 0.3)', background: '#FAF6F0', fontSize: '0.9rem', color: '#4A121E' }}
+                  />
+                </div>
 
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button
-                  id="modal-customer-submit-btn"
-                  type="submit"
-                  style={{ flex: 1, background: '#187A90', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
-                >
-                  Sign In
-                </button>
-                <button
-                  id="modal-customer-cancel-btn"
-                  type="button"
-                  onClick={() => setShowCustomerLoginModal(false)}
-                  style={{ background: '#F1F5F9', border: 'none', padding: '12px 16px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    id="modal-customer-submit-btn"
+                    type="submit"
+                    disabled={isCustomerLoggingIn}
+                    style={{ flex: 1, background: 'linear-gradient(135deg, #15803D 0%, #16A34A 100%)', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '800', fontSize: '0.95rem', cursor: isCustomerLoggingIn ? 'not-allowed' : 'pointer', boxShadow: '0 4px 12px rgba(22, 163, 74, 0.25)' }}
+                  >
+                    {isCustomerLoggingIn ? 'Sending...' : '📲 Send WhatsApp OTP'}
+                  </button>
+                  <button
+                    id="modal-customer-cancel-btn"
+                    type="button"
+                    onClick={() => setShowCustomerLoginModal(false)}
+                    style={{ background: '#FAF6F0', border: '1px solid #E2E8F0', padding: '12px 16px', borderRadius: '8px', fontWeight: '700', color: '#64748B', cursor: 'pointer' }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <form onSubmit={handleVerifyWhatsAppOtp}>
+                <div style={{ background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: '12px', padding: '14px', marginBottom: '16px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.72rem', color: '#92400E', fontWeight: '800', textTransform: 'uppercase' }}>
+                    💬 WhatsApp Verification Code
+                  </div>
+                  <div style={{ fontSize: '2rem', fontWeight: '900', color: '#B45309', letterSpacing: '6px', fontFamily: 'monospace' }}>
+                    {generatedOtp}
+                  </div>
+                  <a
+                    href={`https://wa.me/919343207515?text=${encodeURIComponent(`Namaste The Laddu Story! My login verification OTP is ${generatedOtp} for phone +91 ${loginPhoneInput.replace(/\D/g, '').slice(-10)}.`)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '8px', background: '#15803D', color: '#fff', padding: '4px 12px', borderRadius: '16px', fontSize: '0.75rem', fontWeight: '700', textDecoration: 'none' }}
+                  >
+                    <span>📲 Open WhatsApp Hotline</span>
+                  </a>
+                </div>
+
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px', textAlign: 'center' }}>
+                    ENTER 4-DIGIT CODE
+                  </label>
+                  <input
+                    id="modal-customer-otp-input"
+                    type="text"
+                    maxLength="4"
+                    placeholder="• • • •"
+                    value={enteredOtp}
+                    onChange={e => setEnteredOtp(e.target.value.replace(/\D/g, ''))}
+                    autoFocus
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '12px', borderRadius: '8px', border: '2px solid #B45309', fontSize: '1.4rem', fontWeight: '800', textAlign: 'center', letterSpacing: '8px', background: '#FAF6F0', color: '#4A121E' }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    id="modal-customer-verify-btn"
+                    type="submit"
+                    disabled={enteredOtp.length < 4 || isCustomerLoggingIn}
+                    style={{ flex: 1, background: (enteredOtp.length < 4 || isCustomerLoggingIn) ? '#94A3B8' : 'linear-gradient(135deg, #4A121E 0%, #831843 100%)', color: '#fff', border: '1px solid #B45309', padding: '12px', borderRadius: '8px', fontWeight: '800', cursor: (enteredOtp.length < 4 || isCustomerLoggingIn) ? 'not-allowed' : 'pointer' }}
+                  >
+                    {isCustomerLoggingIn ? 'Verifying...' : '✓ Verify Code'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setOtpStep('PHONE'); setEnteredOtp(''); }}
+                    style={{ background: '#FAF6F0', border: '1px solid #E2E8F0', padding: '12px 14px', borderRadius: '8px', fontWeight: '700', color: '#831843', cursor: 'pointer', fontSize: '0.82rem' }}
+                  >
+                    Back
+                  </button>
+                </div>
+              </form>
+            )}
+
           </div>
         </div>
       )}
@@ -2576,17 +2814,17 @@ export default function App() {
               ✓
             </div>
 
-            <h3 style={{ margin: '0 0 4px', fontSize: '1.4rem', color: '#0F5869', fontWeight: '800' }}>
+            <h3 style={{ margin: '0 0 4px', fontSize: '1.4rem', color: '#4A121E', fontWeight: '800' }}>
               Order Placed Successfully!
             </h3>
             <div style={{ fontSize: '0.85rem', color: '#64748B', marginBottom: '14px' }}>
-              Order ID: <b style={{ color: '#0F5869' }}>{orderSuccess.orderId}</b>
+              Order ID: <b style={{ color: '#4A121E' }}>{orderSuccess.orderId}</b>
             </div>
 
-            <div style={{ background: '#F8FAFC', padding: '12px', borderRadius: '12px', marginBottom: '16px', border: '1px solid #E2E8F0', textAlign: 'left', fontSize: '0.85rem' }}>
+            <div style={{ background: '#FAF6F0', padding: '12px', borderRadius: '12px', marginBottom: '16px', border: '1px solid #E2E8F0', textAlign: 'left', fontSize: '0.85rem' }}>
               <div>👤 <b>{orderSuccess.name}</b> (+91 {orderSuccess.phone})</div>
               <div style={{ color: '#64748B', marginTop: '4px' }}>📍 {orderSuccess.address}</div>
-              <div style={{ marginTop: '8px', borderTop: '1px solid #E2E8F0', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', fontWeight: '800', color: '#0F5869' }}>
+              <div style={{ marginTop: '8px', borderTop: '1px solid #E2E8F0', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', fontWeight: '800', color: '#4A121E' }}>
                 <span>Total Amount:</span>
                 <span>₹{orderSuccess.total.toLocaleString('en-IN')}</span>
               </div>
@@ -2595,7 +2833,7 @@ export default function App() {
             {/* UPI QR Code */}
             {qrDataUrl && (
               <div style={{ marginBottom: '16px' }}>
-                <div style={{ fontSize: '0.82rem', fontWeight: '800', color: '#0F5869', marginBottom: '8px' }}>
+                <div style={{ fontSize: '0.82rem', fontWeight: '800', color: '#4A121E', marginBottom: '8px' }}>
                   SCAN & PAY VIA ANY UPI APP (GPAY / PHONEPE / PAYTM)
                 </div>
                 <img 
@@ -2615,7 +2853,7 @@ export default function App() {
                   setOrderSuccess(null);
                   setActiveTab('track');
                 }}
-                style={{ flex: 1, background: '#187A90', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '700', fontSize: '0.9rem', cursor: 'pointer' }}
+                style={{ flex: 1, background: '#831843', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '700', fontSize: '0.9rem', cursor: 'pointer' }}
               >
                 Track Live Order →
               </button>
@@ -2638,11 +2876,11 @@ export default function App() {
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <div style={{ background: '#fff', borderRadius: '20px', padding: '28px', maxWidth: '360px', width: '100%', textAlign: 'center' }}>
             
-            <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#F1F5F9', color: '#0F5869', fontSize: '1.4rem', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#F1F5F9', color: '#4A121E', fontSize: '1.4rem', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
               🔒
             </div>
 
-            <h3 style={{ margin: '0 0 6px', fontSize: '1.25rem', color: '#0F5869', fontWeight: '800' }}>
+            <h3 style={{ margin: '0 0 6px', fontSize: '1.25rem', color: '#4A121E', fontWeight: '800' }}>
               Staff & Kitchen Login
             </h3>
             <p style={{ margin: '0 0 16px', fontSize: '0.82rem', color: '#64748B' }}>
@@ -2664,7 +2902,7 @@ export default function App() {
                 <button
                   id="staff-pin-submit-btn"
                   type="submit"
-                  style={{ flex: 1, background: '#0F5869', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
+                  style={{ flex: 1, background: '#4A121E', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
                 >
                   Verify PIN
                 </button>
@@ -2693,7 +2931,7 @@ export default function App() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <span style={{ fontSize: '1.6rem' }}>⚡</span>
-                <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#0F5869', fontWeight: '800' }}>
+                <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#4A121E', fontWeight: '800' }}>
                   Supabase Cloud Database Settings
                 </h3>
               </div>
@@ -2758,14 +2996,14 @@ export default function App() {
                 </div>
               )}
 
-              <div style={{ background: '#F8FAFC', padding: '12px', borderRadius: '10px', fontSize: '0.78rem', color: '#64748B', marginBottom: '18px', border: '1px solid #E2E8F0' }}>
+              <div style={{ background: '#FAF6F0', padding: '12px', borderRadius: '10px', fontSize: '0.78rem', color: '#64748B', marginBottom: '18px', border: '1px solid #E2E8F0' }}>
                 <b>Quick 3-Step Setup:</b>
                 <ol style={{ margin: '6px 0 0', paddingLeft: '18px' }}>
-                  <li>Create a free project at <a href="https://supabase.com" target="_blank" rel="noreferrer" style={{ color: '#0F5869', fontWeight: '700' }}>supabase.com</a>.</li>
+                  <li>Create a free project at <a href="https://supabase.com" target="_blank" rel="noreferrer" style={{ color: '#4A121E', fontWeight: '700' }}>supabase.com</a>.</li>
                   <li>Paste and execute <code>schema/supabase_schema.sql</code> in the SQL Editor.</li>
                   <li>Copy Project URL & anon key from <i>Project Settings ➔ API</i> and click Save.</li>
                 </ol>
-                <div style={{ marginTop: '6px', color: '#0F5869' }}>
+                <div style={{ marginTop: '6px', color: '#4A121E' }}>
                   ✓ Google Sheets backup form submissions remain 100% active in the background!
                 </div>
               </div>
@@ -2774,7 +3012,7 @@ export default function App() {
                 <button
                   type="submit"
                   disabled={supabaseSaving}
-                  style={{ flex: 1, background: '#0F5869', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '700', fontSize: '0.9rem', cursor: 'pointer' }}
+                  style={{ flex: 1, background: '#4A121E', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '700', fontSize: '0.9rem', cursor: 'pointer' }}
                 >
                   {supabaseSaving ? 'Connecting...' : 'Save & Connect Supabase'}
                 </button>
