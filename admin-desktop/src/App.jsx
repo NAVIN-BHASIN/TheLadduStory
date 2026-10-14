@@ -10,6 +10,7 @@ import {
   updateOrderStatusInSupabase,
   fetchProductsFromSupabase,
   updateProductInSupabase,
+  upsertProductInSupabase,
   subscribeToSupabaseRealtime
 } from './services/supabaseClient';
 
@@ -540,6 +541,16 @@ export default function App() {
   const [custName, setCustName] = useState(() => customerUser ? customerUser.name : (localStorage.getItem('tls_cust_name') || ''));
   const [custPhone, setCustPhone] = useState(() => customerUser ? customerUser.phone : (localStorage.getItem('tls_cust_phone') || ''));
   const [custAddress, setCustAddress] = useState(() => customerUser ? customerUser.address : (localStorage.getItem('tls_cust_addr') || ''));
+  const [fulfillmentType, setFulfillmentType] = useState('DELIVERY'); // 'DELIVERY' | 'PICKUP'
+  
+  // URL check for Staff/Admin portal (?staff, ?admin, #staff, #admin)
+  const isStaffUrl = typeof window !== 'undefined' && (
+    window.location.search.includes('staff') ||
+    window.location.search.includes('admin') ||
+    window.location.hash.includes('staff') ||
+    window.location.hash.includes('admin')
+  );
+  const [isStaffRoute, setIsStaffRoute] = useState(isStaffUrl);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(null);
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
@@ -664,6 +675,11 @@ export default function App() {
 
     pollCloud();
     const interval = setInterval(pollCloud, 10000);
+
+    // Auto-prompt staff login modal if ?staff is visited
+    if (isStaffUrl && !isAdminLoggedIn) {
+      setShowLoginModal(true);
+    }
 
     // Initial Supabase Data Fetch & Realtime WebSocket Channel
     let unsubSupabase = null;
@@ -862,35 +878,13 @@ export default function App() {
       formData.append(FORM_ENTRIES.ADDRESS, orderData.address);
       formData.append(FORM_ENTRIES.ITEMS, itemsFormatted);
 
+      // Single, unified Google Form submission (Prevents duplicate rows in Google Sheets)
       await fetch(GOOGLE_FORM_ACTION_URL, {
         method: 'POST',
         mode: 'no-cors',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: formData.toString()
       });
-      // Also submit directly to Google Apps Script Web App for instant OMS sheet entry
-      try {
-        await fetch(APPS_SCRIPT_EXEC_URL, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({
-            orderId: orderData.orderId,
-            name: orderData.name,
-            phone: orderData.phone,
-            address: orderData.address,
-            paymentMethod: orderData.paymentMethod || 'UPI',
-            totalAmount: orderData.total,
-            items: orderData.items.map(i => ({
-              sku: i.sku,
-              name: i.name,
-              pack: i.cleanWeight,
-              qty: i.qty,
-              unitPrice: i.unitPrice
-            }))
-          })
-        });
-      } catch(e) {}
 
     } catch (err) {
       console.warn('Form sync executed');
@@ -964,12 +958,17 @@ export default function App() {
   // CHECKOUT
   const handleCheckout = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return; // Prevent double-clicks / duplicate submissions
     if (cart.length === 0) {
       alert('Your cart is empty! Please select delicious laddus to place order.');
       return;
     }
-    if (!custName.trim() || !custPhone.trim() || !custAddress.trim()) {
-      alert('Please fill in your Name, 10-Digit Mobile Number, and Delivery Address.');
+    if (!custName.trim() || !custPhone.trim()) {
+      alert('Please fill in your Name and 10-Digit Mobile Number.');
+      return;
+    }
+    if (fulfillmentType === 'DELIVERY' && !custAddress.trim()) {
+      alert('Please provide your Doorstep Delivery Address.');
       return;
     }
 
@@ -977,13 +976,18 @@ export default function App() {
     const orderId = `TLS-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.floor(1000 + Math.random() * 9000)}`;
     const cleanPhone = custPhone.replace(/\D/g, '').slice(-10);
 
+    const resolvedAddress = fulfillmentType === 'PICKUP'
+      ? (custAddress.trim() ? `Self-Pickup (${custAddress.trim()})` : 'Store Self-Pickup: The Laddu Story Kitchen, Bangalore')
+      : custAddress.trim();
+
     const newOrder = {
       orderId,
       time: new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' }) + ', ' + new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
-      channel: 'ONLINE_STORE',
+      channel: fulfillmentType === 'PICKUP' ? 'STORE_PICKUP' : 'ONLINE_STORE',
+      fulfillmentType,
       name: custName.trim(),
       phone: cleanPhone,
-      address: custAddress.trim(),
+      address: resolvedAddress,
       items: cart.map(i => ({
         sku: i.sku,
         name: i.name,
@@ -1137,10 +1141,10 @@ export default function App() {
     try {
       localStorage.setItem('tls_products_db', JSON.stringify(updated));
     } catch (e) {}
-    await updateProductInSupabase(editingProduct);
+    await upsertProductInSupabase(editingProduct);
     await syncWithCloud(orders, updated);
     setEditingProduct(null);
-    alert(`✓ Successfully updated ${editingProduct.name}!`);
+    alert(`✓ Successfully updated ${editingProduct.name} in Catalog & Supabase!`);
   };
 
   // Add new product (Inventory Manager)
@@ -1159,9 +1163,10 @@ export default function App() {
     try {
       localStorage.setItem('tls_products_db', JSON.stringify(updated));
     } catch (e) {}
+    await upsertProductInSupabase(createdItem);
     await syncWithCloud(orders, updated);
     setShowAddProductModal(false);
-    alert(`✓ Product ${createdItem.name} added to catalog!`);
+    alert(`✓ Product ${createdItem.name} added to catalog & synced with Supabase!`);
   };
 
   // Reorder past items
@@ -1195,10 +1200,20 @@ export default function App() {
     const oPhone = (o.phone || '').replace(/\D/g, '').slice(-10);
     return oPhone === customerCleanPhone;
   });
-  const activeOrders = myOrders.filter(o => o.status !== 'DELIVERED' && o.status !== 'CANCELLED');
-  const pastOrders = myOrders.filter(o => o.status === 'DELIVERED' || o.status === 'CANCELLED');
+  const activeOrders = myOrders.filter(o => o.status !== 'DELIVERED' && o.status !== 'ORDER PICKED UP' && o.status !== 'CANCELLED');
+  const pastOrders = myOrders.filter(o => o.status === 'DELIVERED' || o.status === 'ORDER PICKED UP' || o.status === 'CANCELLED');
 
-  const getStatusStepIndex = (status) => {
+  const getStatusStepIndex = (status, fulfillment = 'DELIVERY') => {
+    if (fulfillment === 'PICKUP') {
+      switch (status) {
+        case 'RECEIVED': return 1;
+        case 'PREPARING': return 2;
+        case 'PACKED': return 3;
+        case 'READY FOR PICKUP': return 4;
+        case 'ORDER PICKED UP': return 5;
+        default: return 1;
+      }
+    }
     switch (status) {
       case 'RECEIVED': return 1;
       case 'PREPARING': return 2;
@@ -1292,11 +1307,52 @@ export default function App() {
             ))}
           </div>
 
+          {/* Fulfillment Method Selection */}
+          <div style={{ marginBottom: '14px' }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '800', color: '#0F5869', marginBottom: '6px' }}>
+              SELECT DELIVERY / PICKUP METHOD:
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => setFulfillmentType('DELIVERY')}
+                style={{
+                  padding: '9px 8px',
+                  borderRadius: '8px',
+                  border: fulfillmentType === 'DELIVERY' ? '2px solid #0F5869' : '1px solid #CBD5E1',
+                  background: fulfillmentType === 'DELIVERY' ? '#E0F2FE' : '#fff',
+                  color: fulfillmentType === 'DELIVERY' ? '#0F5869' : '#64748B',
+                  fontWeight: '800',
+                  fontSize: '0.82rem',
+                  cursor: 'pointer'
+                }}
+              >
+                🛵 Doorstep Delivery
+              </button>
+              <button
+                type="button"
+                onClick={() => setFulfillmentType('PICKUP')}
+                style={{
+                  padding: '9px 8px',
+                  borderRadius: '8px',
+                  border: fulfillmentType === 'PICKUP' ? '2px solid #0F5869' : '1px solid #CBD5E1',
+                  background: fulfillmentType === 'PICKUP' ? '#E0F2FE' : '#fff',
+                  color: fulfillmentType === 'PICKUP' ? '#0F5869' : '#64748B',
+                  fontWeight: '800',
+                  fontSize: '0.82rem',
+                  cursor: 'pointer'
+                }}
+              >
+                🛍️ Store Self-Pickup
+              </button>
+            </div>
+          </div>
+
           {/* Customer Inputs */}
           <div style={{ background: '#F8FAFC', padding: '14px', borderRadius: '12px', marginBottom: '16px', border: '1px solid #E2E8F0' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
               <span style={{ fontSize: '0.8rem', fontWeight: '800', color: '#475569' }}>
-                CUSTOMER CONTACT & DELIVERY
+                {fulfillmentType === 'PICKUP' ? 'CONTACT & PICKUP DETAILS' : 'CUSTOMER CONTACT & DELIVERY'}
               </span>
               {customerUser && (
                 <span style={{ fontSize: '0.72rem', color: '#059669', fontWeight: '800' }}>
@@ -1320,10 +1376,15 @@ export default function App() {
               onChange={e => setCustPhone(e.target.value)}
               style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem', marginBottom: '8px' }}
             />
+            {fulfillmentType === 'PICKUP' && (
+              <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', padding: '8px 10px', borderRadius: '6px', fontSize: '0.75rem', color: '#1E40AF', marginBottom: '8px' }}>
+                📍 <b>Kitchen Pickup:</b> The Laddu Story Artisanal Kitchen, Bangalore. Freshly packed & ready for collection!
+              </div>
+            )}
             <textarea
               id="checkout-cust-address"
               rows={2}
-              placeholder="Complete Delivery Address with Pincode *"
+              placeholder={fulfillmentType === 'PICKUP' ? "Pickup Note / Expected Time (e.g. Pickup today 5 PM) [Optional]" : "Complete Delivery Address with Pincode *"}
               value={custAddress}
               onChange={e => setCustAddress(e.target.value)}
               style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
@@ -1337,7 +1398,7 @@ export default function App() {
               <span>₹{cartTotal.toLocaleString('en-IN')}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#059669', marginBottom: '8px', fontWeight: '600' }}>
-              <span>Bangalore Express Delivery</span>
+              <span>{fulfillmentType === 'PICKUP' ? 'Store Pickup Collection' : 'Bangalore Express Delivery'}</span>
               <span>FREE</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', fontWeight: '800', color: '#0F5869' }}>
@@ -1509,7 +1570,7 @@ export default function App() {
               >
                 ⚙️ Staff OMS ({orders.length})
               </button>
-            ) : (
+            ) : isStaffRoute ? (
               <button
                 id="nav-staff-login-btn"
                 onClick={() => setShowLoginModal(true)}
@@ -1526,7 +1587,7 @@ export default function App() {
               >
                 🔒 Staff Login
               </button>
-            )}
+            ) : null}
           </div>
 
         </div>
@@ -1816,7 +1877,8 @@ export default function App() {
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
                       {activeOrders.map(o => {
-                        const stepIndex = getStatusStepIndex(o.status);
+                        const isOrderPickup = o.fulfillmentType === 'PICKUP' || (o.channel && o.channel.includes('PICKUP'));
+                        const stepIndex = getStatusStepIndex(o.status, isOrderPickup ? 'PICKUP' : 'DELIVERY');
                         return (
                           <div key={o.orderId} style={{ background: '#fff', borderRadius: '16px', border: '1px solid #E2E8F0', padding: '22px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
                             
@@ -2108,7 +2170,7 @@ export default function App() {
 
                 {/* Status Quick Filter Chips */}
                 <div style={{ display: 'flex', gap: '8px', marginBottom: '18px', overflowX: 'auto', paddingBottom: '4px' }}>
-                  {['ALL', 'RECEIVED', 'PREPARING', 'PACKED', 'OUT FOR DELIVERY', 'DELIVERED'].map(st => {
+                  {['ALL', 'RECEIVED', 'PREPARING', 'PACKED', 'READY FOR PICKUP', 'ORDER PICKED UP', 'OUT FOR DELIVERY', 'DELIVERED'].map(st => {
                     const count = st === 'ALL' ? orders.length : orders.filter(o => o.status === st).length;
                     const isSelected = filterStatus === st;
                     return (
@@ -2183,8 +2245,17 @@ export default function App() {
                             <option value="RECEIVED">RECEIVED</option>
                             <option value="PREPARING">PREPARING</option>
                             <option value="PACKED">PACKED</option>
-                            <option value="OUT FOR DELIVERY">OUT FOR DELIVERY</option>
-                            <option value="DELIVERED">DELIVERED</option>
+                            {(o.fulfillmentType === 'PICKUP' || (o.channel && o.channel.includes('PICKUP'))) ? (
+                              <>
+                                <option value="READY FOR PICKUP">READY FOR PICKUP</option>
+                                <option value="ORDER PICKED UP">ORDER PICKED UP</option>
+                              </>
+                            ) : (
+                              <>
+                                <option value="OUT FOR DELIVERY">OUT FOR DELIVERY</option>
+                                <option value="DELIVERED">DELIVERED</option>
+                              </>
+                            )}
                             <option value="CANCELLED">CANCELLED</option>
                           </select>
                         </div>

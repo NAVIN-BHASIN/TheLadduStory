@@ -4,7 +4,10 @@
  */
 import { createClient } from '@supabase/supabase-js';
 
-// Default configuration from environment variables or localStorage
+// Production Supabase Credentials (Auto-connected for all customers & staff)
+const DEFAULT_SUPABASE_URL = 'https://xhxepdlaqifqtlfoaqrae.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhoeGVwZGxhcWlmcXRmb2FxcmFlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE5MDY0MDcsImV4cCI6MjEwNzQ4MjQwN30.RHGGLcDZA6H4mvcOkOVOfryFlqHBayBJ8Ox6CMQq6Ic';
+
 const getSavedConfig = () => {
   try {
     const saved = localStorage.getItem('tls_supabase_config');
@@ -15,8 +18,8 @@ const getSavedConfig = () => {
   } catch (e) {}
 
   return {
-    url: import.meta.env?.VITE_SUPABASE_URL || '',
-    anonKey: import.meta.env?.VITE_SUPABASE_ANON_KEY || ''
+    url: import.meta.env?.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL,
+    anonKey: import.meta.env?.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY
   };
 };
 
@@ -41,7 +44,7 @@ export const initSupabaseClient = (url, anonKey) => {
   return false;
 };
 
-// Auto-initialize if config exists
+// Auto-initialize if config exists (Always connected by default)
 if (currentConfig.url && currentConfig.anonKey) {
   initSupabaseClient(currentConfig.url, currentConfig.anonKey);
 }
@@ -105,23 +108,27 @@ export const fetchOrdersFromSupabase = async () => {
       return acc;
     }, {});
 
-    return (orders || []).map(o => ({
-      orderId: o.order_id,
-      time: new Date(o.created_at).toLocaleString('en-US', {
-        month: '2-digit', day: '2-digit', year: '2-digit',
-        hour: 'numeric', minute: '2-digit', hour12: true
-      }),
-      channel: o.channel || 'ONLINE_STORE',
-      name: o.customer_name,
-      phone: o.customer_phone,
-      address: o.customer_address,
-      status: o.order_status,
-      paymentMethod: o.payment_method || 'UPI',
-      paymentStatus: o.payment_status || 'PAID',
-      total: Number(o.total_amount),
-      notes: o.notes || '',
-      items: itemsByOrder[o.order_id] || []
-    }));
+    return (orders || []).map(o => {
+      const isPickup = (o.channel && o.channel.includes('PICKUP')) || (o.notes && o.notes.includes('PICKUP'));
+      return {
+        orderId: o.order_id,
+        time: new Date(o.created_at).toLocaleString('en-US', {
+          month: '2-digit', day: '2-digit', year: '2-digit',
+          hour: 'numeric', minute: '2-digit', hour12: true
+        }),
+        channel: o.channel || 'ONLINE_STORE',
+        fulfillmentType: isPickup ? 'PICKUP' : 'DELIVERY',
+        name: o.customer_name,
+        phone: o.customer_phone,
+        address: o.customer_address,
+        status: o.order_status,
+        paymentMethod: o.payment_method || 'UPI',
+        paymentStatus: o.payment_status || 'PAID',
+        total: Number(o.total_amount),
+        notes: o.notes || '',
+        items: itemsByOrder[o.order_id] || []
+      };
+    });
   } catch (err) {
     console.error('[Supabase] fetchOrders error:', err);
     return null;
@@ -134,12 +141,17 @@ export const fetchOrdersFromSupabase = async () => {
 export const insertOrderToSupabase = async (order) => {
   if (!supabaseInstance) return { success: false, reason: 'NOT_CONFIGURED' };
   try {
+    const fulfillmentLabel = order.fulfillmentType === 'PICKUP' ? 'STORE_PICKUP' : (order.channel || 'ONLINE_STORE');
+    const enrichedNotes = order.fulfillmentType === 'PICKUP'
+      ? `[PICKUP AT KITCHEN] ${order.notes || ''}`.trim()
+      : (order.notes || '');
+
     // 1. Insert order record
     const { error: orderErr } = await supabaseInstance
       .from('orders')
       .insert({
         order_id: order.orderId,
-        channel: order.channel || 'ONLINE_STORE',
+        channel: fulfillmentLabel,
         customer_name: order.name,
         customer_phone: order.phone,
         customer_address: order.address,
@@ -147,7 +159,7 @@ export const insertOrderToSupabase = async (order) => {
         payment_method: order.paymentMethod || 'UPI',
         payment_status: order.paymentStatus || 'PAID',
         order_status: order.status || 'RECEIVED',
-        notes: order.notes || ''
+        notes: enrichedNotes
       });
 
     if (orderErr) throw orderErr;
@@ -255,30 +267,45 @@ export const fetchProductsFromSupabase = async () => {
 };
 
 /**
- * Update product stock / pricing in Supabase
+ * Upsert product in Supabase (Handles both stock updates and adding new items)
  */
-export const updateProductInSupabase = async (product) => {
+export const upsertProductInSupabase = async (product) => {
   if (!supabaseInstance) return { success: false, reason: 'NOT_CONFIGURED' };
   try {
     const { error } = await supabaseInstance
       .from('products')
-      .update({
-        stock_status: product.stockStatus,
-        stock_count: product.stockCount,
-        rate_per_kg: product.ratePerKg,
-        p500: product.p500,
-        p1k: product.p1k,
+      .upsert({
+        id: product.id || String(Date.now()),
+        sku: product.sku,
+        name: product.name,
+        category: product.category || 'LADDU',
+        rate_per_kg: product.ratePerKg || (product.p1k || 1200),
+        moq: product.moq || '500g',
+        opt1: product.opt1 || `${product.w1 || '500g'} (₹${product.p500 || 600})`,
+        opt2: product.opt2 || `${product.w2 || '1 Kg'} (₹${product.p1k || 1200})`,
+        p500: product.p500 || 600,
+        p1k: product.p1k || 1200,
+        w1: product.w1 || '500g',
+        w2: product.w2 || '1 Kg',
+        tag: product.tag || 'Artisanal Special',
+        description: product.desc || product.description || '',
+        benefit: product.benefit || '',
+        image: product.image || 'images/products/RAGI-WALNUT.jpg',
+        stock_status: product.stockStatus || 'IN_STOCK',
+        stock_count: Number(product.stockCount ?? 50),
+        is_munchy: !!product.isMunchy,
         updated_at: new Date().toISOString()
-      })
-      .eq('sku', product.sku);
+      }, { onConflict: 'sku' });
 
     if (error) throw error;
     return { success: true };
   } catch (err) {
-    console.error('[Supabase] updateProduct error:', err);
+    console.error('[Supabase] upsertProduct error:', err);
     return { success: false, error: err.message };
   }
 };
+
+export const updateProductInSupabase = upsertProductInSupabase;
 
 /**
  * Subscribe to real-time changes via WebSockets
