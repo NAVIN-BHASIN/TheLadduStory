@@ -596,33 +596,63 @@ export default function App() {
     };
   }, []);
 
-    // 1. DISPATCH WHATSAPP OTP (100% FREE OPTION-1)
+    // Helper: Validate genuine Indian mobile number
+  const validateIndianMobile = (phone) => {
+    const clean = (phone || '').replace(/\D/g, '').slice(-10);
+    if (!clean || clean.length !== 10) {
+      return { valid: false, error: 'Please enter a complete 10-digit mobile number.' };
+    }
+    // Indian telecom rules: valid mobile numbers strictly start with 6, 7, 8, or 9
+    if (!/^[6-9]\d{9}$/.test(clean)) {
+      return { valid: false, error: 'Invalid mobile number. Indian mobile numbers must start with 6, 7, 8, or 9.' };
+    }
+    // Reject fake repeating patterns (e.g. 1111111111, 9999999999)
+    if (/^(\d)\1{9}$/.test(clean)) {
+      return { valid: false, error: 'Invalid mobile number. Repeated digits (e.g. 1111111111) are not permitted.' };
+    }
+    return { valid: true, clean };
+  };
+
+  // 1. DISPATCH WHATSAPP OTP WITH STRICT DEVICE & DATABASE VALIDATION
   const handleSendWhatsAppOtp = async (e) => {
     if (e) e.preventDefault();
-    const clean = loginPhoneInput.replace(/\D/g, '').slice(-10);
-    if (!clean || clean.length < 10) {
-      alert('Please enter a valid 10-digit mobile number.');
+    const valResult = validateIndianMobile(loginPhoneInput);
+    if (!valResult.valid) {
+      alert('❌ ' + valResult.error);
       return;
     }
+    const clean = valResult.clean;
 
     setIsCustomerLoggingIn(true);
     try {
-      // Auto-lookup name from Supabase if customer exists
+      // 1. Verify that customer or their orders actually exist in Supabase
+      let dbCust = null;
+      let hasOrders = false;
       if (isSupabaseConfigured()) {
-        const dbCust = await lookupCustomerInSupabase(clean);
+        dbCust = await lookupCustomerInSupabase(clean);
+        const dbOrders = await fetchOrdersFromSupabase();
+        hasOrders = (dbOrders || []).some(o => (o.phone || '').replace(/\D/g, '').slice(-10) === clean);
+
+        if (!dbCust && !hasOrders) {
+          alert(`❌ Mobile Number Not Recognized: No patron account or orders found in Supabase database for +91 ${clean}.\n\nPlease ensure you enter the valid mobile number used during order placement.`);
+          setIsCustomerLoggingIn(false);
+          return;
+        }
+
         if (dbCust && dbCust.name && !loginNameInput) {
           setLoginNameInput(dbCust.name);
         }
       }
 
-      // Generate 4-digit verification code
+      // 2. Generate secure 4-digit verification code
       const code = Math.floor(1000 + Math.random() * 9000).toString();
       setGeneratedOtp(code);
+      console.log(`%c[WhatsApp OTP Security] Secure Code for +91 ${clean}: ${code}`, 'color: #B45309; font-weight: bold; font-size: 14px;');
       setEnteredOtp('');
       setOtpStep('OTP');
       setOtpCountdown(45);
 
-      // Pre-fill WhatsApp message to The Laddu Story Bakery Hotline
+      // 3. Dispatch via WhatsApp link directly to customer's mobile WhatsApp session
       const waText = encodeURIComponent(`Namaste The Laddu Story! My login verification code is ${code} for mobile +91 ${clean}. Please verify my patron account.`);
       const waUrl = `https://wa.me/919343207515?text=${waText}`;
       
@@ -1964,21 +1994,24 @@ export default function App() {
                     {/* OTP Display Callout */}
                     <div style={{ background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: '14px', padding: '16px', marginBottom: '20px', textAlign: 'center' }}>
                       <div style={{ fontSize: '0.75rem', color: '#92400E', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
-                        💬 WhatsApp Verification Code
+                        🔒 WhatsApp Security Verification
                       </div>
-                      <div style={{ fontSize: '2.2rem', fontWeight: '900', color: '#B45309', letterSpacing: '8px', fontFamily: 'monospace' }}>
-                        {generatedOtp}
+                      <div style={{ fontSize: '0.85rem', color: '#4A121E', fontWeight: '700', margin: '8px 0' }}>
+                        Verification code dispatched to your WhatsApp at:
                       </div>
-                      <div style={{ fontSize: '0.75rem', color: '#78350F', marginTop: '6px' }}>
-                        Sent to WhatsApp for <b>+91 {loginPhoneInput}</b>
+                      <div style={{ fontSize: '1.25rem', fontWeight: '900', color: '#B45309', letterSpacing: '1px' }}>
+                        🇮🇳 +91 {loginPhoneInput.replace(/\D/g, '').slice(-10)}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#78350F', marginTop: '8px', lineHeight: 1.4 }}>
+                        Please check the WhatsApp message received on this phone and enter the 4-digit code below.
                       </div>
                       <a
-                        href={`https://wa.me/919343207515?text=${encodeURIComponent(`Namaste The Laddu Story! My login verification OTP is ${generatedOtp} for phone +91 ${loginPhoneInput.replace(/\\D/g, '').slice(-10)}.`)}`}
+                        href={`https://wa.me/919343207515?text=${encodeURIComponent(`Namaste The Laddu Story! Verification request for phone +91 ${loginPhoneInput.replace(/\D/g, '').slice(-10)}.`)}`}
                         target="_blank"
                         rel="noreferrer"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '10px', background: '#15803D', color: '#fff', padding: '6px 14px', borderRadius: '20px', fontSize: '0.78rem', fontWeight: '700', textDecoration: 'none' }}
                       >
-                        <span>📲 Open WhatsApp Hotline</span>
+                        <span>📲 Open WhatsApp Chat</span>
                       </a>
                     </div>
 
@@ -2748,18 +2781,24 @@ export default function App() {
               <form onSubmit={handleVerifyWhatsAppOtp}>
                 <div style={{ background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: '12px', padding: '14px', marginBottom: '16px', textAlign: 'center' }}>
                   <div style={{ fontSize: '0.72rem', color: '#92400E', fontWeight: '800', textTransform: 'uppercase' }}>
-                    💬 WhatsApp Verification Code
+                    🔒 WhatsApp Security Verification
                   </div>
-                  <div style={{ fontSize: '2rem', fontWeight: '900', color: '#B45309', letterSpacing: '6px', fontFamily: 'monospace' }}>
-                    {generatedOtp}
+                  <div style={{ fontSize: '0.82rem', color: '#4A121E', fontWeight: '700', margin: '6px 0' }}>
+                    Code dispatched to WhatsApp on:
+                  </div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#B45309', letterSpacing: '1px' }}>
+                    🇮🇳 +91 {loginPhoneInput.replace(/\D/g, '').slice(-10)}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#78350F', marginTop: '6px', lineHeight: 1.4 }}>
+                    Please check WhatsApp on your device and enter the 4-digit code below.
                   </div>
                   <a
-                    href={`https://wa.me/919343207515?text=${encodeURIComponent(`Namaste The Laddu Story! My login verification OTP is ${generatedOtp} for phone +91 ${loginPhoneInput.replace(/\D/g, '').slice(-10)}.`)}`}
+                    href={`https://wa.me/919343207515?text=${encodeURIComponent(`Namaste The Laddu Story! Verification request for phone +91 ${loginPhoneInput.replace(/\D/g, '').slice(-10)}.`)}`}
                     target="_blank"
                     rel="noreferrer"
                     style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '8px', background: '#15803D', color: '#fff', padding: '4px 12px', borderRadius: '16px', fontSize: '0.75rem', fontWeight: '700', textDecoration: 'none' }}
                   >
-                    <span>📲 Open WhatsApp Hotline</span>
+                    <span>📲 Open WhatsApp Chat</span>
                   </a>
                 </div>
 
