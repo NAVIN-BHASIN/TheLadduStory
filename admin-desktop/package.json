@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.3",
+    "firebase": "^13.0.0",
     "lucide-react": "^0.400.0",
     "qrcode": "^1.5.3",
     "react": "^18.3.1",

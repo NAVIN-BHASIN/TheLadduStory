@@ -74,11 +74,15 @@ create table if not exists public.customers (
     phone text primary key,
     name text not null,
     address text,
+    password_hash text,
     total_orders integer default 1,
     lifetime_value numeric default 0,
     last_order_at timestamptz default now(),
     created_at timestamptz default now()
 );
+
+-- Migration support for existing tables:
+alter table public.customers add column if not exists password_hash text;
 
 -- 6. ENABLE ROW LEVEL SECURITY (RLS)
 alter table public.products enable row level security;

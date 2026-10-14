@@ -400,3 +400,106 @@ export const subscribeToSupabaseRealtime = (onOrderChange, onProductChange, onCu
   }
 };
 
+/**
+ * Fast SHA-256 Password Hash helper using browser Web Crypto API
+ */
+export const hashPassword = async (pwd) => {
+  if (!pwd) return '';
+  try {
+    const msgUint8 = new TextEncoder().encode(pwd);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch (e) {
+    return btoa(pwd);
+  }
+};
+
+/**
+ * Verify Customer User ID & Password against Supabase
+ */
+export const verifyCustomerPassword = async (phoneOrEmail, password) => {
+  if (!supabaseInstance) return { success: false, reason: 'NOT_CONFIGURED' };
+  try {
+    const cleanPhone = (phoneOrEmail || '').replace(/\D/g, '').slice(-10);
+    const inputHash = await hashPassword(password);
+
+    // Look up customer
+    const { data: cust, error } = await supabaseInstance
+      .from('customers')
+      .select('*')
+      .eq('phone', cleanPhone)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!cust) {
+      // Check if orders exist for this phone
+      const { data: ords } = await supabaseInstance
+        .from('orders')
+        .select('*')
+        .eq('customer_phone', cleanPhone)
+        .limit(1);
+
+      if (!ords || ords.length === 0) {
+        return { success: false, reason: 'NOT_FOUND' };
+      }
+      return { success: false, reason: 'NO_PASSWORD_SET' };
+    }
+
+    if (!cust.password_hash) {
+      return { success: false, reason: 'NO_PASSWORD_SET', customer: cust };
+    }
+
+    if (cust.password_hash === inputHash || cust.password_hash === password) {
+      return { success: true, customer: cust };
+    } else {
+      return { success: false, reason: 'WRONG_PASSWORD', customer: cust };
+    }
+  } catch (err) {
+    console.error('[Supabase] verifyCustomerPassword error:', err);
+    return { success: false, error: err.message };
+  }
+};
+
+/**
+ * Set or reset Customer Password in Supabase
+ */
+export const setCustomerPasswordInSupabase = async (phone, newPassword) => {
+  if (!supabaseInstance) return { success: false, reason: 'NOT_CONFIGURED' };
+  try {
+    const cleanPhone = (phone || '').replace(/\D/g, '').slice(-10);
+    const passHash = await hashPassword(newPassword);
+
+    // Check if customer exists in customers table
+    const { data: existing } = await supabaseInstance
+      .from('customers')
+      .select('phone, name')
+      .eq('phone', cleanPhone)
+      .maybeSingle();
+
+    if (existing) {
+      const { error } = await supabaseInstance
+        .from('customers')
+        .update({ password_hash: passHash })
+        .eq('phone', cleanPhone);
+      if (error) throw error;
+    } else {
+      // Upsert new customer with password
+      const { error } = await supabaseInstance
+        .from('customers')
+        .insert({
+          phone: cleanPhone,
+          name: 'Valued Patron',
+          password_hash: passHash
+        });
+      if (error) throw error;
+    }
+
+    return { success: true };
+  } catch (err) {
+    console.error('[Supabase] setCustomerPassword error:', err);
+    return { success: false, error: err.message };
+  }
+};
+
+
