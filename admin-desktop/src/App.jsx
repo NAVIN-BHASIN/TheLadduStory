@@ -364,6 +364,23 @@ export const cleanPickupNote = (note) => {
     .trim();
 };
 
+
+// OFFICIAL CATALOG PRODUCT GALLERY IMAGES
+export const CATALOG_GALLERY_IMAGES = [
+  { name: 'Ragi Walnut', file: 'images/products/RAGI-WALNUT.jpg' },
+  { name: 'Till Sesame', file: 'images/products/TILL-BLACK-SESAME.jpg' },
+  { name: 'Sattu Almond', file: 'images/products/SATTU-ALMOND.jpg' },
+  { name: 'Groundnut', file: 'images/products/GROUNDNUT.jpg' },
+  { name: 'Quinoa Moong', file: 'images/products/QUINOA-MOONG-DAL.jpg' },
+  { name: 'Methi Fenugreek', file: 'images/products/METHI-FENUGREEK.jpg' },
+  { name: 'Dates Dry Fruits', file: 'images/products/DATES-DRY-FRUITS.jpg' },
+  { name: 'Dates Pops', file: 'images/products/DATES-POPS.jpg' },
+  { name: 'Post Delivery', file: 'images/products/POST-DELIVERY-PANJEERI.jpg' },
+  { name: 'Jawar Panjeeri', file: 'images/products/JAWAR-PANJEERI.jpg' },
+  { name: 'Savory Makhana', file: 'images/products/SAVORY-MAKHANA.jpg' },
+  { name: 'Savory Murmura', file: 'images/products/SAVORY-MURMURA.jpg' }
+];
+
 export default function App() {
   // Navigation & View State
   const [activeTab, setActiveTab] = useState('store'); // 'store' | 'track' | 'admin'
@@ -483,6 +500,9 @@ export default function App() {
   const [upiRefId, setUpiRefId] = useState('');
   const [selectedOrderForPay, setSelectedOrderForPay] = useState(null); // Customer pay-now modal
   const [paymentFilter, setPaymentFilter] = useState('ALL'); // 'ALL' | 'PAID' | 'PENDING'
+  const [postOrderPayMode, setPostOrderPayMode] = useState('NOW'); // 'NOW' | 'LATER'
+  const [postOrderUtr, setPostOrderUtr] = useState('');
+  const [showGalleryDrawer, setShowGalleryDrawer] = useState(false);
   
   // URL check for Staff/Admin portal (?staff, ?admin, #staff, #admin)
   const isStaffUrl = typeof window !== 'undefined' && (
@@ -1022,7 +1042,94 @@ export default function App() {
     alert(`All Laddus updated to ${newMoq} MOQ! Store now displays ${newMoq === '250g' ? '3 weight options (250g, 500g, 1 Kg)' : '2 weight options (500g, 1 Kg)'}.`);
   };
 
-  // Staff / Admin Payment Receipt & Status Management
+  // Patron Post-Order Payment Handlers (on Order Placed screen)
+  const handleConfirmPaidOnline = async () => {
+    if (!orderSuccess) return;
+    const orderId = orderSuccess.orderId;
+    const updated = orders.map(o => o.orderId === orderId ? {
+      ...o,
+      paymentStatus: 'PAID',
+      paymentMethod: 'UPI_ONLINE',
+      upiRef: postOrderUtr.trim() || 'UPI-APP',
+      paymentReceivedAt: new Date().toLocaleTimeString()
+    } : o);
+    setOrders(updated);
+    try {
+      localStorage.setItem('tls_orders_db', JSON.stringify(updated));
+    } catch (e) {}
+
+    setOrderSuccess(prev => ({
+      ...prev,
+      paymentStatus: 'PAID',
+      paymentMethod: 'UPI_ONLINE',
+      upiRef: postOrderUtr.trim() || 'UPI-APP'
+    }));
+
+    try {
+      await updateOrderPaymentStatusInSupabase(orderId, 'PAID', 'UPI_ONLINE');
+    } catch (e) {}
+
+    try {
+      await fetch(REALTIME_TOPIC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'PAYMENT_UPDATE',
+          orderId,
+          paymentStatus: 'PAID',
+          paymentMethod: 'UPI_ONLINE',
+          upiRef: postOrderUtr.trim() || 'UPI-APP',
+          timestamp: new Date().toISOString()
+        })
+      });
+    } catch (e) {}
+
+    alert('✓ Payment of ₹' + orderSuccess.total.toLocaleString('en-IN') + ' recorded successfully! Staff will verify your UPI transaction.');
+  };
+
+  const handleConfirmPayLater = async () => {
+    if (!orderSuccess) return;
+    const orderId = orderSuccess.orderId;
+    const updated = orders.map(o => o.orderId === orderId ? {
+      ...o,
+      paymentStatus: 'PAY_ON_PICKUP',
+      paymentMethod: 'PAY_AT_STORE'
+    } : o);
+    setOrders(updated);
+    try {
+      localStorage.setItem('tls_orders_db', JSON.stringify(updated));
+    } catch (e) {}
+
+    setOrderSuccess(prev => ({
+      ...prev,
+      paymentStatus: 'PAY_ON_PICKUP',
+      paymentMethod: 'PAY_AT_STORE'
+    }));
+
+    try {
+      await updateOrderPaymentStatusInSupabase(orderId, 'PAY_ON_PICKUP', 'PAY_AT_STORE');
+    } catch (e) {}
+
+    alert('✓ Order confirmed for Store Pickup! Please pay ₹' + orderSuccess.total.toLocaleString('en-IN') + ' in cash or via UPI at the kitchen counter.');
+  };
+
+  // Image Upload Handler for Inventory (FileReader dataURL)
+  const handleProductImageFile = (e, isNew = false) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (loadEvt) => {
+      const dataUrl = loadEvt.target.result;
+      if (isNew) {
+        setNewProductForm(prev => ({ ...prev, image: dataUrl, imageFileName: file.name }));
+      } else {
+        setEditingProduct(prev => ({ ...prev, image: dataUrl, imageFileName: file.name }));
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+    // Staff / Admin Payment Receipt & Status Management
   const handleStaffMarkPayment = async (orderId, method) => {
     const methodLabel = method === 'CASH' ? 'Cash at Counter' : 'UPI Verified';
     if (!window.confirm(`Confirm marking payment for ${orderId} as PAID via ${methodLabel}?`)) return;
@@ -1181,7 +1288,6 @@ export default function App() {
       ? (note ? `Store Self-Pickup: The Laddu Story Kitchen, Bangalore (Note: ${note})` : 'Store Self-Pickup: The Laddu Story Kitchen, Bangalore')
       : custAddress.trim();
 
-    const isPayNow = paymentTiming === 'NOW';
     const newOrder = {
       orderId,
       time: new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' }) + ', ' + new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
@@ -1201,10 +1307,12 @@ export default function App() {
       })),
       total: cartTotal,
       status: 'RECEIVED',
-      paymentMethod: isPayNow ? 'UPI_ONLINE' : 'PAY_ON_PICKUP',
-      paymentStatus: isPayNow ? 'PAID' : 'PAY_ON_PICKUP',
-      upiRef: isPayNow ? (upiRefId.trim() || 'UPI-APP') : ''
+      paymentMethod: 'PENDING',
+      paymentStatus: 'UNPAID',
+      upiRef: ''
     };
+    setPostOrderUtr('');
+    setPostOrderPayMode('NOW');
 
     const updatedOrders = [newOrder, ...orders];
     setOrders(updatedOrders);
@@ -1627,124 +1735,6 @@ export default function App() {
             />
           </div>
 
-          {/* Payment Method Selector (Pay Now or Pay on Pickup) */}
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '800', color: '#4A121E', marginBottom: '6px' }}>
-              SELECT PAYMENT TIMING:
-            </label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
-              <button
-                type="button"
-                id="pay-now-toggle-btn"
-                onClick={() => setPaymentTiming('NOW')}
-                style={{
-                  padding: '10px 8px',
-                  borderRadius: '8px',
-                  border: paymentTiming === 'NOW' ? '2px solid #059669' : '1px solid #CBD5E1',
-                  background: paymentTiming === 'NOW' ? '#ECFDF5' : '#fff',
-                  color: paymentTiming === 'NOW' ? '#065F46' : '#64748B',
-                  fontWeight: '800',
-                  fontSize: '0.82rem',
-                  cursor: 'pointer'
-                }}
-              >
-                📱 Pay Now (UPI QR)
-              </button>
-              <button
-                type="button"
-                id="pay-later-toggle-btn"
-                onClick={() => setPaymentTiming('LATER')}
-                style={{
-                  padding: '10px 8px',
-                  borderRadius: '8px',
-                  border: paymentTiming === 'LATER' ? '2px solid #B45309' : '1px solid #CBD5E1',
-                  background: paymentTiming === 'LATER' ? '#FFFBEB' : '#fff',
-                  color: paymentTiming === 'LATER' ? '#92400E' : '#64748B',
-                  fontWeight: '800',
-                  fontSize: '0.82rem',
-                  cursor: 'pointer'
-                }}
-              >
-                💵 Pay on Pickup (Later)
-              </button>
-            </div>
-
-            {paymentTiming === 'NOW' ? (
-              <div style={{ background: '#F0FDF4', border: '1.5px solid #86EFAC', borderRadius: '12px', padding: '14px', textAlign: 'center' }}>
-                <div style={{ fontSize: '0.85rem', fontWeight: '800', color: '#166534', marginBottom: '8px' }}>
-                  Scan & Pay via Google Pay / PhonePe / Paytm / BHIM
-                </div>
-                
-                <div style={{ display: 'inline-block', background: '#fff', padding: '10px', borderRadius: '14px', border: '1px solid #CBD5E1', boxShadow: '0 4px 12px rgba(0,0,0,0.06)' }}>
-                  <img
-                    src="upi_qr.png"
-                    alt="The Laddu Story Official UPI QR Code"
-                    style={{ width: '185px', height: '185px', display: 'block', objectFit: 'contain' }}
-                    onError={(e) => { e.target.src = 'images/TheLadduStory_Logo.jpg'; }}
-                  />
-                </div>
-
-                <div style={{ marginTop: '10px', fontSize: '0.84rem', fontWeight: '700', color: '#166534', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                  <span>UPI ID:</span>
-                  <span style={{ fontFamily: 'monospace', background: '#DCFCE7', padding: '3px 8px', borderRadius: '6px', border: '1px solid #86EFAC', fontSize: '0.86rem' }}>
-                    neetikabhasin@okaxis
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText('neetikabhasin@okaxis');
-                      alert('UPI ID copied to clipboard: neetikabhasin@okaxis');
-                    }}
-                    style={{ background: '#166534', color: '#fff', border: 'none', padding: '3px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: '800', cursor: 'pointer' }}
-                  >
-                    📋 Copy
-                  </button>
-                </div>
-
-                <div style={{ marginTop: '10px' }}>
-                  <a
-                    href={`upi://pay?pa=neetikabhasin@okaxis&pn=The%20Laddu%20Story&am=${cartTotal}&cu=INR&tn=TLS-Order`}
-                    style={{
-                      display: 'inline-block',
-                      background: '#059669',
-                      color: '#fff',
-                      textDecoration: 'none',
-                      padding: '9px 18px',
-                      borderRadius: '8px',
-                      fontSize: '0.85rem',
-                      fontWeight: '800',
-                      boxShadow: '0 2px 8px rgba(5, 150, 105, 0.35)'
-                    }}
-                  >
-                    ⚡ Tap to Pay ₹{cartTotal.toLocaleString('en-IN')} via UPI App
-                  </a>
-                </div>
-
-                <div style={{ marginTop: '10px' }}>
-                  <input
-                    type="text"
-                    placeholder="UPI Reference No / UTR (Optional)"
-                    value={upiRefId}
-                    onChange={e => setUpiRefId(e.target.value)}
-                    style={{ width: '100%', boxSizing: 'border-box', padding: '8px 12px', borderRadius: '6px', border: '1px solid #86EFAC', fontSize: '0.82rem', background: '#fff' }}
-                  />
-                  <div style={{ fontSize: '0.72rem', color: '#166534', marginTop: '4px' }}>
-                    ✓ Instant order placement. Payment status tracked in real-time.
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div style={{ background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: '12px', padding: '14px', fontSize: '0.82rem', color: '#92400E' }}>
-                <div style={{ fontWeight: '800', fontSize: '0.88rem', marginBottom: '4px' }}>
-                  📍 Payment at Store Pickup (Bangalore Kitchen):
-                </div>
-                <div>
-                  You can pay ₹<b>{cartTotal.toLocaleString('en-IN')}</b> in <b>Cash</b> or via <b>UPI</b> when you collect your order at our kitchen. Our staff will receive cash or verify UPI and mark your order as Paid.
-                </div>
-              </div>
-            )}
-          </div>
-
           {/* Bill Summary */}
           <div style={{ borderTop: '2px solid #E2E8F0', paddingTop: '12px', marginBottom: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: '#64748B', marginBottom: '6px' }}>
@@ -1767,7 +1757,7 @@ export default function App() {
             disabled={isSubmitting}
             style={{
               width: '100%',
-              background: isSubmitting ? '#94A3B8' : (paymentTiming === 'NOW' ? '#059669' : '#831843'),
+              background: isSubmitting ? '#94A3B8' : '#831843',
               color: '#FFFFFF',
               border: 'none',
               padding: '14px',
@@ -1775,7 +1765,7 @@ export default function App() {
               fontWeight: '800',
               fontSize: '1rem',
               cursor: isSubmitting ? 'not-allowed' : 'pointer',
-              boxShadow: '0 4px 12px rgba(24, 122, 144, 0.35)',
+              boxShadow: '0 4px 12px rgba(131, 24, 67, 0.35)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -1783,10 +1773,8 @@ export default function App() {
             }}
           >
             {isSubmitting 
-              ? '⏳ Saving Order...' 
-              : (paymentTiming === 'NOW' 
-                  ? `📱 Place Order & Pay ₹${cartTotal.toLocaleString('en-IN')} via UPI` 
-                  : `🛍️ Place Order (Pay ₹${cartTotal.toLocaleString('en-IN')} on Pickup)`)}
+              ? '⏳ Placing Order...' 
+              : `🛍️ Place Order (₹${cartTotal.toLocaleString('en-IN')}) →`}
           </button>
         </div>
       )}
@@ -3131,37 +3119,92 @@ export default function App() {
       )}
 
       {/* ------------------------------------------------------------- */}
-      {/* MODAL: EDIT PRODUCT INVENTORY / MOQ                           */}
+      {/* MODAL: EDIT PRODUCT INVENTORY & DETAILS (REDESIGNED)          */}
       {/* ------------------------------------------------------------- */}
       {editingProduct && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-          <div style={{ background: '#fff', borderRadius: '20px', padding: '24px', maxWidth: '440px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
-            <h3 style={{ margin: '0 0 14px', fontSize: '1.25rem', color: '#4A121E', fontWeight: '800' }}>
-              Edit Product: {editingProduct.name}
-            </h3>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(3px)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <div style={{ background: '#FFFFFF', borderRadius: '24px', padding: '26px', maxWidth: '580px', width: '100%', maxHeight: '92vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.35)', border: '1.5px solid #FDE68A' }}>
+            
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px', borderBottom: '1.5px solid #FAF6F0', paddingBottom: '12px' }}>
+              <div>
+                <span style={{ fontSize: '0.72rem', fontWeight: '800', color: '#B45309', letterSpacing: '0.5px' }}>
+                  SKU: {editingProduct.sku} • {editingProduct.category || 'LADDU'}
+                </span>
+                <h3 style={{ margin: '2px 0 0', fontSize: '1.3rem', color: '#4A121E', fontWeight: '800' }}>
+                  Edit Product: {editingProduct.name}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingProduct(null)}
+                style={{ background: '#F1F5F9', border: 'none', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', color: '#64748B', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
 
             <form onSubmit={handleSaveProductEdit}>
-              <div style={{ marginBottom: '10px' }}>
+              {/* SECTION 1: PRODUCT IDENTITY */}
+              <div style={{ marginBottom: '14px' }}>
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
-                  ITEM NAME
+                  ITEM NAME *
                 </label>
                 <input
                   type="text"
+                  required
                   value={editingProduct.name}
                   onChange={e => setEditingProduct({ ...editingProduct, name: e.target.value })}
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.9rem', fontWeight: '700', color: '#1E293B' }}
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+              {/* Category & Badge Tag */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+                    CATEGORY
+                  </label>
+                  <select
+                    value={editingProduct.category || 'LADDU'}
+                    onChange={e => {
+                      const cat = e.target.value;
+                      setEditingProduct({
+                        ...editingProduct,
+                        category: cat,
+                        isMunchy: cat === 'SAVORY'
+                      });
+                    }}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', fontWeight: '700' }}
+                  >
+                    <option value="LADDU">Artisanal Laddu</option>
+                    <option value="SAVORY">Savory Munchy / Roasted Snack</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+                    TAG / HIGHLIGHT BADGE
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Kid's Special, Superfood"
+                    value={editingProduct.tag || ''}
+                    onChange={e => setEditingProduct({ ...editingProduct, tag: e.target.value })}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                  />
+                </div>
+              </div>
+
+              {/* SECTION 2: MOQ & STOCK STATUS */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '14px', background: '#FAF6F0', padding: '12px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.73rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
                     MIN ORDER QTY (MOQ)
                   </label>
                   <select
                     value={editingProduct.moq || '500g'}
                     onChange={e => setEditingProduct({ ...editingProduct, moq: e.target.value })}
-                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem', fontWeight: '700' }}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.82rem', fontWeight: '700' }}
                   >
                     <option value="250g">250g (3 Weight Options)</option>
                     <option value="500g">500g (2 Weight Options)</option>
@@ -3170,101 +3213,304 @@ export default function App() {
                   </select>
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+                  <label style={{ display: 'block', fontSize: '0.73rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
                     STOCK STATUS
                   </label>
                   <select
                     value={editingProduct.stockStatus || 'IN_STOCK'}
                     onChange={e => setEditingProduct({ ...editingProduct, stockStatus: e.target.value })}
-                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem', fontWeight: '700' }}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.82rem', fontWeight: '700', color: editingProduct.stockStatus === 'OUT_OF_STOCK' ? '#991B1B' : '#047857' }}
                   >
-                    <option value="IN_STOCK">IN STOCK</option>
-                    <option value="LOW_STOCK">LOW STOCK</option>
-                    <option value="OUT_OF_STOCK">OUT OF STOCK</option>
+                    <option value="IN_STOCK">🟢 IN STOCK</option>
+                    <option value="LOW_STOCK">🟠 LOW STOCK</option>
+                    <option value="OUT_OF_STOCK">🔴 OUT OF STOCK</option>
                   </select>
                 </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '10px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
-                    250g / OPT 0 PRICE (₹)
+                  <label style={{ display: 'block', fontSize: '0.73rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+                    STOCK UNITS COUNT
                   </label>
                   <input
                     type="number"
-                    value={editingProduct.p250 || Math.round((Number(editingProduct.p500 || 0)) * 0.5)}
-                    onChange={e => {
-                      const p = Number(e.target.value);
-                      setEditingProduct({ 
-                        ...editingProduct, 
-                        p250: p,
-                        opt0: `250g (₹${p})`
-                      });
-                    }}
-                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
-                    500g / OPT 1 PRICE (₹)
-                  </label>
-                  <input
-                    type="number"
-                    value={editingProduct.p500}
-                    onChange={e => {
-                      const p = Number(e.target.value);
-                      setEditingProduct({ 
-                        ...editingProduct, 
-                        p500: p,
-                        opt1: `${editingProduct.w1 || '500g'} (₹${p})`
-                      });
-                    }}
-                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
-                    1 Kg / OPT 2 PRICE (₹)
-                  </label>
-                  <input
-                    type="number"
-                    value={editingProduct.p1k}
-                    onChange={e => {
-                      const p = Number(e.target.value);
-                      setEditingProduct({ 
-                        ...editingProduct, 
-                        p1k: p,
-                        opt2: `${editingProduct.w2 || '1 Kg'} (₹${p})`
-                      });
-                    }}
-                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                    min="0"
+                    value={editingProduct.stockCount ?? 50}
+                    onChange={e => setEditingProduct({ ...editingProduct, stockCount: Number(e.target.value) })}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem', fontWeight: '700' }}
                   />
                 </div>
               </div>
 
-              <div style={{ marginBottom: '12px' }}>
+              {/* SECTION 3: TIERED PRICING (250g, 500g, 1 Kg) */}
+              <div style={{ marginBottom: '14px', background: '#F8FAFC', padding: '12px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: '800', color: '#4A121E' }}>
+                    PRICING BY WEIGHT TIERS (₹)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const p1 = Number(editingProduct.p1k || editingProduct.ratePerKg || 0);
+                      if (p1 > 0) {
+                        const half = Math.round(p1 * 0.5);
+                        const quarter = Math.round(p1 * 0.25);
+                        setEditingProduct({
+                          ...editingProduct,
+                          ratePerKg: p1,
+                          p1k: p1,
+                          p500: half,
+                          p250: quarter,
+                          opt0: `250g (₹${quarter})`,
+                          opt1: `${editingProduct.w1 || '500g'} (₹${half})`,
+                          opt2: `${editingProduct.w2 || '1 Kg'} (₹${p1})`
+                        });
+                      }
+                    }}
+                    style={{ background: '#FAF6F0', border: '1px solid #B45309', color: '#B45309', padding: '3px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: '800', cursor: 'pointer' }}
+                  >
+                    ⚡ Auto-calculate from 1 Kg
+                  </button>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: '800', color: '#64748B', marginBottom: '3px' }}>
+                      RATE / KG (₹)
+                    </label>
+                    <input
+                      type="number"
+                      value={editingProduct.ratePerKg || editingProduct.p1k || 0}
+                      onChange={e => {
+                        const r = Number(e.target.value);
+                        setEditingProduct({ ...editingProduct, ratePerKg: r });
+                      }}
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '8px 6px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: '800', color: '#64748B', marginBottom: '3px' }}>
+                      250g PRICE (₹)
+                    </label>
+                    <input
+                      type="number"
+                      value={editingProduct.p250 || Math.round((Number(editingProduct.p500 || 0)) * 0.5)}
+                      onChange={e => {
+                        const p = Number(e.target.value);
+                        setEditingProduct({ 
+                          ...editingProduct, 
+                          p250: p,
+                          opt0: `250g (₹${p})`
+                        });
+                      }}
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '8px 6px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: '800', color: '#64748B', marginBottom: '3px' }}>
+                      500g PRICE (₹)
+                    </label>
+                    <input
+                      type="number"
+                      value={editingProduct.p500}
+                      onChange={e => {
+                        const p = Number(e.target.value);
+                        setEditingProduct({ 
+                          ...editingProduct, 
+                          p500: p,
+                          opt1: `${editingProduct.w1 || '500g'} (₹${p})`
+                        });
+                      }}
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '8px 6px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: '800', color: '#64748B', marginBottom: '3px' }}>
+                      1 KG PRICE (₹)
+                    </label>
+                    <input
+                      type="number"
+                      value={editingProduct.p1k}
+                      onChange={e => {
+                        const p = Number(e.target.value);
+                        setEditingProduct({ 
+                          ...editingProduct, 
+                          p1k: p,
+                          opt2: `${editingProduct.w2 || '1 Kg'} (₹${p})`
+                        });
+                      }}
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '8px 6px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 4: INGREDIENTS & BENEFITS */}
+              <div style={{ marginBottom: '14px' }}>
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
-                  IMAGE PATH OR URL
+                  INGREDIENTS & FORMULATION
                 </label>
-                <input
-                  type="text"
-                  value={editingProduct.image}
-                  onChange={e => setEditingProduct({ ...editingProduct, image: e.target.value })}
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                <textarea
+                  rows={2}
+                  value={editingProduct.desc || ''}
+                  onChange={e => setEditingProduct({ ...editingProduct, desc: e.target.value })}
+                  placeholder="e.g. Medjool Dates, Almonds, Pistachios, Cashews, Pure Cow Ghee"
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.82rem', resize: 'vertical' }}
                 />
               </div>
 
-              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+                  HEALTH & AYURVEDIC BENEFITS
+                </label>
+                <input
+                  type="text"
+                  value={editingProduct.benefit || ''}
+                  onChange={e => setEditingProduct({ ...editingProduct, benefit: e.target.value })}
+                  placeholder="e.g. 100% Naturally Sweetened with Dates, Instant Energy, Fiber Rich"
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.82rem' }}
+                />
+              </div>
+
+              {/* SECTION 5: IMAGE SELECTION (FOLDER / BROWSER / GALLERY) */}
+              <div style={{ marginBottom: '16px', background: '#FAF6F0', padding: '14px', borderRadius: '14px', border: '1.5px solid #FDE68A' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <label style={{ fontSize: '0.78rem', fontWeight: '800', color: '#4A121E' }}>
+                    PRODUCT IMAGE SELECTION
+                  </label>
+                  <span style={{ fontSize: '0.72rem', color: '#64748B' }}>
+                    Select from folder or catalog
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', gap: '14px', alignItems: 'center', marginBottom: '12px' }}>
+                  {/* Live Thumbnail Preview */}
+                  <div style={{ width: '84px', height: '84px', borderRadius: '12px', overflow: 'hidden', border: '2px solid #CBD5E1', background: '#fff', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+                    <img
+                      src={editingProduct.image || 'images/TheLadduStory_Logo.jpg'}
+                      alt={editingProduct.name}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      onError={(e) => { e.target.src = 'images/TheLadduStory_Logo.jpg'; }}
+                    />
+                  </div>
+
+                  {/* Actions to pick image */}
+                  <div style={{ flex: 1 }}>
+                    <input
+                      type="file"
+                      id="edit-product-file-input"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={e => {
+                        const file = e.target.files && e.target.files[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          setEditingProduct({ ...editingProduct, image: ev.target.result });
+                        };
+                        reader.readAsDataURL(file);
+                      }}
+                    />
+
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                      <button
+                        type="button"
+                        id="btn-browse-device-img"
+                        onClick={() => document.getElementById('edit-product-file-input')?.click()}
+                        style={{
+                          background: '#4A121E',
+                          color: '#fff',
+                          border: 'none',
+                          padding: '8px 14px',
+                          borderRadius: '8px',
+                          fontWeight: '800',
+                          fontSize: '0.78rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          boxShadow: '0 2px 6px rgba(74, 18, 30, 0.25)'
+                        }}
+                      >
+                        📁 Select Image from Folder / Device
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowGalleryDrawer(!showGalleryDrawer)}
+                        style={{
+                          background: '#fff',
+                          color: '#4A121E',
+                          border: '1.5px solid #B45309',
+                          padding: '8px 12px',
+                          borderRadius: '8px',
+                          fontWeight: '800',
+                          fontSize: '0.78rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🖼️ {showGalleryDrawer ? 'Hide Catalog Photos' : 'Choose Catalog Photo'}
+                      </button>
+                    </div>
+
+                    <input
+                      type="text"
+                      placeholder="Or enter image URL / path (e.g. images/products/DATES-POPS.jpg)"
+                      value={editingProduct.image || ''}
+                      onChange={e => setEditingProduct({ ...editingProduct, image: e.target.value })}
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '7px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.78rem' }}
+                    />
+                  </div>
+                </div>
+
+                {/* EXPANDABLE CATALOG GALLERY PICKER */}
+                {showGalleryDrawer && (
+                  <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed #CBD5E1' }}>
+                    <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#475569', marginBottom: '8px' }}>
+                      CLICK ANY CATALOG PHOTO TO SELECT:
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', maxHeight: '160px', overflowY: 'auto', padding: '4px' }}>
+                      {CATALOG_GALLERY_IMAGES.map(item => (
+                        <div
+                          key={item.file}
+                          onClick={() => setEditingProduct({ ...editingProduct, image: item.file })}
+                          style={{
+                            background: editingProduct.image === item.file ? '#FEF3C7' : '#fff',
+                            border: editingProduct.image === item.file ? '2px solid #B45309' : '1px solid #E2E8F0',
+                            borderRadius: '8px',
+                            padding: '4px',
+                            cursor: 'pointer',
+                            textAlign: 'center',
+                            transition: 'transform 0.15s ease'
+                          }}
+                        >
+                          <img
+                            src={item.file}
+                            alt={item.name}
+                            style={{ width: '100%', height: '48px', objectFit: 'cover', borderRadius: '4px' }}
+                            onError={(e) => { e.target.src = 'images/TheLadduStory_Logo.jpg'; }}
+                          />
+                          <div style={{ fontSize: '0.68rem', fontWeight: '700', color: '#1E293B', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {item.name}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: '10px', marginTop: '18px' }}>
                 <button
                   type="submit"
-                  style={{ flex: 1, background: '#4A121E', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
+                  id="save-product-edit-btn"
+                  style={{ flex: 1, background: 'linear-gradient(135deg, #4A121E 0%, #831843 100%)', color: '#fff', border: 'none', padding: '13px', borderRadius: '10px', fontWeight: '800', fontSize: '0.92rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(74, 18, 30, 0.25)' }}
                 >
                   Save & Update Store
                 </button>
                 <button
                   type="button"
                   onClick={() => setEditingProduct(null)}
-                  style={{ background: '#F1F5F9', border: 'none', padding: '12px 16px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
+                  style={{ background: '#F1F5F9', border: '1px solid #CBD5E1', padding: '13px 20px', borderRadius: '10px', fontWeight: '700', fontSize: '0.9rem', color: '#475569', cursor: 'pointer' }}
                 >
                   Cancel
                 </button>
@@ -3339,115 +3585,414 @@ export default function App() {
       )}
 
       {/* ------------------------------------------------------------- */}
-      {/* MODAL: ADD NEW PRODUCT / VARIATION                            */}
+      {/* MODAL: ADD NEW PRODUCT / VARIATION (REDESIGNED)               */}
       {/* ------------------------------------------------------------- */}
       {showAddProductModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-          <div style={{ background: '#fff', borderRadius: '20px', padding: '24px', maxWidth: '440px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
-            <h3 style={{ margin: '0 0 14px', fontSize: '1.25rem', color: '#4A121E', fontWeight: '800' }}>
-              Add New Product or Variation
-            </h3>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(3px)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <div style={{ background: '#FFFFFF', borderRadius: '24px', padding: '26px', maxWidth: '580px', width: '100%', maxHeight: '92vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.35)', border: '1.5px solid #FDE68A' }}>
+            
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px', borderBottom: '1.5px solid #FAF6F0', paddingBottom: '12px' }}>
+              <div>
+                <span style={{ fontSize: '0.72rem', fontWeight: '800', color: '#B45309', letterSpacing: '0.5px' }}>
+                  CATALOG & INVENTORY EXPANSION
+                </span>
+                <h3 style={{ margin: '2px 0 0', fontSize: '1.3rem', color: '#4A121E', fontWeight: '800' }}>
+                  Add New Product / Variation
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddProductModal(false)}
+                style={{ background: '#F1F5F9', border: 'none', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', color: '#64748B', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
 
             <form onSubmit={handleCreateProduct}>
-              <div style={{ marginBottom: '10px' }}>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
-                  SKU CODE (e.g. BESAN-ALMOND) *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newProductForm.sku}
-                  onChange={e => setNewProductForm({ ...newProductForm, sku: e.target.value.toUpperCase().replace(/\s+/g, '-') })}
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
-                />
-              </div>
-
-              <div style={{ marginBottom: '10px' }}>
-                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
-                  PRODUCT NAME *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newProductForm.name}
-                  onChange={e => setNewProductForm({ ...newProductForm, name: e.target.value })}
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+              {/* SECTION 1: SKU & ITEM NAME */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '10px', marginBottom: '14px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
-                    MIN ORDER QTY
+                    SKU CODE *
                   </label>
                   <input
                     type="text"
-                    value={newProductForm.moq}
+                    required
+                    placeholder="e.g. BESAN-ALMOND"
+                    value={newProductForm.sku}
+                    onChange={e => setNewProductForm({ ...newProductForm, sku: e.target.value.toUpperCase().replace(/\s+/g, '-') })}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', fontWeight: '800', fontFamily: 'monospace' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+                    PRODUCT NAME *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Besan Almond Laddu"
+                    value={newProductForm.name}
+                    onChange={e => setNewProductForm({ ...newProductForm, name: e.target.value })}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.9rem', fontWeight: '700', color: '#1E293B' }}
+                  />
+                </div>
+              </div>
+
+              {/* Category & Badge Tag */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+                    CATEGORY
+                  </label>
+                  <select
+                    value={newProductForm.category || 'LADDU'}
+                    onChange={e => {
+                      const cat = e.target.value;
+                      setNewProductForm({
+                        ...newProductForm,
+                        category: cat,
+                        isMunchy: cat === 'SAVORY'
+                      });
+                    }}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', fontWeight: '700' }}
+                  >
+                    <option value="LADDU">Artisanal Laddu</option>
+                    <option value="SAVORY">Savory Munchy / Roasted Snack</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+                    TAG / HIGHLIGHT BADGE
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Festive Special, Diabetic-Friendly"
+                    value={newProductForm.tag || ''}
+                    onChange={e => setNewProductForm({ ...newProductForm, tag: e.target.value })}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                  />
+                </div>
+              </div>
+
+              {/* SECTION 2: MOQ & STOCK STATUS */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '14px', background: '#FAF6F0', padding: '12px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.73rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+                    MIN ORDER QTY (MOQ)
+                  </label>
+                  <select
+                    value={newProductForm.moq || '500g'}
                     onChange={e => setNewProductForm({ ...newProductForm, moq: e.target.value })}
-                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
-                  />
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.82rem', fontWeight: '700' }}
+                  >
+                    <option value="250g">250g (3 Weight Options)</option>
+                    <option value="500g">500g (2 Weight Options)</option>
+                    <option value="100g">100g (Savory)</option>
+                    <option value="200g">200g (Savory)</option>
+                  </select>
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
-                    RATE PER KG (₹)
+                  <label style={{ display: 'block', fontSize: '0.73rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+                    STOCK STATUS
+                  </label>
+                  <select
+                    value={newProductForm.stockStatus || 'IN_STOCK'}
+                    onChange={e => setNewProductForm({ ...newProductForm, stockStatus: e.target.value })}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.82rem', fontWeight: '700', color: newProductForm.stockStatus === 'OUT_OF_STOCK' ? '#991B1B' : '#047857' }}
+                  >
+                    <option value="IN_STOCK">🟢 IN STOCK</option>
+                    <option value="LOW_STOCK">🟠 LOW STOCK</option>
+                    <option value="OUT_OF_STOCK">🔴 OUT OF STOCK</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.73rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+                    INITIAL STOCK UNITS
                   </label>
                   <input
                     type="number"
-                    value={newProductForm.ratePerKg}
-                    onChange={e => setNewProductForm({ ...newProductForm, ratePerKg: Number(e.target.value) })}
-                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                    min="0"
+                    value={newProductForm.stockCount ?? 50}
+                    onChange={e => setNewProductForm({ ...newProductForm, stockCount: Number(e.target.value) })}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem', fontWeight: '700' }}
                   />
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
-                    500g PRICE (₹)
-                  </label>
-                  <input
-                    type="number"
-                    value={newProductForm.p500}
-                    onChange={e => setNewProductForm({ ...newProductForm, p500: Number(e.target.value), opt1: `500g (₹${e.target.value})` })}
-                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
-                  />
+              {/* SECTION 3: TIERED PRICING */}
+              <div style={{ marginBottom: '14px', background: '#F8FAFC', padding: '12px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: '800', color: '#4A121E' }}>
+                    PRICING BY WEIGHT TIERS (₹)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const p1 = Number(newProductForm.p1k || newProductForm.ratePerKg || 0);
+                      if (p1 > 0) {
+                        const half = Math.round(p1 * 0.5);
+                        const quarter = Math.round(p1 * 0.25);
+                        setNewProductForm({
+                          ...newProductForm,
+                          ratePerKg: p1,
+                          p1k: p1,
+                          p500: half,
+                          p250: quarter,
+                          opt0: `250g (₹${quarter})`,
+                          opt1: `${newProductForm.w1 || '500g'} (₹${half})`,
+                          opt2: `${newProductForm.w2 || '1 Kg'} (₹${p1})`
+                        });
+                      }
+                    }}
+                    style={{ background: '#FAF6F0', border: '1px solid #B45309', color: '#B45309', padding: '3px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: '800', cursor: 'pointer' }}
+                  >
+                    ⚡ Auto-calculate from 1 Kg
+                  </button>
                 </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
-                    1 KG PRICE (₹)
-                  </label>
-                  <input
-                    type="number"
-                    value={newProductForm.p1k}
-                    onChange={e => setNewProductForm({ ...newProductForm, p1k: Number(e.target.value), opt2: `1 Kg (₹${e.target.value})` })}
-                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
-                  />
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: '800', color: '#64748B', marginBottom: '3px' }}>
+                      RATE / KG (₹)
+                    </label>
+                    <input
+                      type="number"
+                      value={newProductForm.ratePerKg || 1200}
+                      onChange={e => {
+                        const r = Number(e.target.value);
+                        setNewProductForm({ ...newProductForm, ratePerKg: r });
+                      }}
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '8px 6px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: '800', color: '#64748B', marginBottom: '3px' }}>
+                      250g PRICE (₹)
+                    </label>
+                    <input
+                      type="number"
+                      value={newProductForm.p250 || Math.round((Number(newProductForm.p500 || 600)) * 0.5)}
+                      onChange={e => {
+                        const p = Number(e.target.value);
+                        setNewProductForm({ 
+                          ...newProductForm, 
+                          p250: p,
+                          opt0: `250g (₹${p})`
+                        });
+                      }}
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '8px 6px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: '800', color: '#64748B', marginBottom: '3px' }}>
+                      500g PRICE (₹)
+                    </label>
+                    <input
+                      type="number"
+                      value={newProductForm.p500 || 600}
+                      onChange={e => {
+                        const p = Number(e.target.value);
+                        setNewProductForm({ 
+                          ...newProductForm, 
+                          p500: p,
+                          opt1: `${newProductForm.w1 || '500g'} (₹${p})`
+                        });
+                      }}
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '8px 6px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: '800', color: '#64748B', marginBottom: '3px' }}>
+                      1 KG PRICE (₹)
+                    </label>
+                    <input
+                      type="number"
+                      value={newProductForm.p1k || 1200}
+                      onChange={e => {
+                        const p = Number(e.target.value);
+                        setNewProductForm({ 
+                          ...newProductForm, 
+                          p1k: p,
+                          opt2: `${newProductForm.w2 || '1 Kg'} (₹${p})`
+                        });
+                      }}
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '8px 6px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div style={{ marginBottom: '12px' }}>
+              {/* SECTION 4: INGREDIENTS & BENEFITS */}
+              <div style={{ marginBottom: '14px' }}>
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
-                  IMAGE PATH / URL
+                  INGREDIENTS & FORMULATION
                 </label>
-                <input
-                  type="text"
-                  value={newProductForm.image}
-                  onChange={e => setNewProductForm({ ...newProductForm, image: e.target.value })}
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                <textarea
+                  rows={2}
+                  value={newProductForm.desc || ''}
+                  onChange={e => setNewProductForm({ ...newProductForm, desc: e.target.value })}
+                  placeholder="e.g. Roasted Besan, California Almonds, Pure Cow Ghee, Bura Sugar"
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.82rem', resize: 'vertical' }}
                 />
               </div>
 
-              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+                  HEALTH & AYURVEDIC BENEFITS
+                </label>
+                <input
+                  type="text"
+                  value={newProductForm.benefit || ''}
+                  onChange={e => setNewProductForm({ ...newProductForm, benefit: e.target.value })}
+                  placeholder="e.g. Rich in Protein & Antioxidants, Wholesome Ayurvedic Energy"
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.82rem' }}
+                />
+              </div>
+
+              {/* SECTION 5: IMAGE SELECTION */}
+              <div style={{ marginBottom: '16px', background: '#FAF6F0', padding: '14px', borderRadius: '14px', border: '1.5px solid #FDE68A' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <label style={{ fontSize: '0.78rem', fontWeight: '800', color: '#4A121E' }}>
+                    PRODUCT IMAGE SELECTION
+                  </label>
+                  <span style={{ fontSize: '0.72rem', color: '#64748B' }}>
+                    Select from folder or catalog
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', gap: '14px', alignItems: 'center', marginBottom: '12px' }}>
+                  {/* Live Thumbnail Preview */}
+                  <div style={{ width: '84px', height: '84px', borderRadius: '12px', overflow: 'hidden', border: '2px solid #CBD5E1', background: '#fff', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+                    <img
+                      src={newProductForm.image || 'images/TheLadduStory_Logo.jpg'}
+                      alt="New Product Preview"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      onError={(e) => { e.target.src = 'images/TheLadduStory_Logo.jpg'; }}
+                    />
+                  </div>
+
+                  {/* Actions to pick image */}
+                  <div style={{ flex: 1 }}>
+                    <input
+                      type="file"
+                      id="new-product-file-input"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={e => {
+                        const file = e.target.files && e.target.files[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          setNewProductForm({ ...newProductForm, image: ev.target.result });
+                        };
+                        reader.readAsDataURL(file);
+                      }}
+                    />
+
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                      <button
+                        type="button"
+                        id="btn-browse-new-img"
+                        onClick={() => document.getElementById('new-product-file-input')?.click()}
+                        style={{
+                          background: '#4A121E',
+                          color: '#fff',
+                          border: 'none',
+                          padding: '8px 14px',
+                          borderRadius: '8px',
+                          fontWeight: '800',
+                          fontSize: '0.78rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          boxShadow: '0 2px 6px rgba(74, 18, 30, 0.25)'
+                        }}
+                      >
+                        📁 Select Image from Folder / Device
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowGalleryDrawer(!showGalleryDrawer)}
+                        style={{
+                          background: '#fff',
+                          color: '#4A121E',
+                          border: '1.5px solid #B45309',
+                          padding: '8px 12px',
+                          borderRadius: '8px',
+                          fontWeight: '800',
+                          fontSize: '0.78rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🖼️ {showGalleryDrawer ? 'Hide Catalog Photos' : 'Choose Catalog Photo'}
+                      </button>
+                    </div>
+
+                    <input
+                      type="text"
+                      placeholder="Or enter image URL / path (e.g. images/products/DATES-POPS.jpg)"
+                      value={newProductForm.image || ''}
+                      onChange={e => setNewProductForm({ ...newProductForm, image: e.target.value })}
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '7px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.78rem' }}
+                    />
+                  </div>
+                </div>
+
+                {/* EXPANDABLE CATALOG GALLERY PICKER */}
+                {showGalleryDrawer && (
+                  <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed #CBD5E1' }}>
+                    <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#475569', marginBottom: '8px' }}>
+                      CLICK ANY CATALOG PHOTO TO SELECT:
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', maxHeight: '160px', overflowY: 'auto', padding: '4px' }}>
+                      {CATALOG_GALLERY_IMAGES.map(item => (
+                        <div
+                          key={item.file}
+                          onClick={() => setNewProductForm({ ...newProductForm, image: item.file })}
+                          style={{
+                            background: newProductForm.image === item.file ? '#FEF3C7' : '#fff',
+                            border: newProductForm.image === item.file ? '2px solid #B45309' : '1px solid #E2E8F0',
+                            borderRadius: '8px',
+                            padding: '4px',
+                            cursor: 'pointer',
+                            textAlign: 'center',
+                            transition: 'transform 0.15s ease'
+                          }}
+                        >
+                          <img
+                            src={item.file}
+                            alt={item.name}
+                            style={{ width: '100%', height: '48px', objectFit: 'cover', borderRadius: '4px' }}
+                            onError={(e) => { e.target.src = 'images/TheLadduStory_Logo.jpg'; }}
+                          />
+                          <div style={{ fontSize: '0.68rem', fontWeight: '700', color: '#1E293B', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {item.name}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: '10px', marginTop: '18px' }}>
                 <button
                   type="submit"
-                  style={{ flex: 1, background: '#4A121E', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
+                  id="create-product-btn"
+                  style={{ flex: 1, background: 'linear-gradient(135deg, #4A121E 0%, #831843 100%)', color: '#fff', border: 'none', padding: '13px', borderRadius: '10px', fontWeight: '800', fontSize: '0.92rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(74, 18, 30, 0.25)' }}
                 >
-                  Create Product
+                  Create & Add to Store
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowAddProductModal(false)}
-                  style={{ background: '#F1F5F9', border: 'none', padding: '12px 16px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
+                  style={{ background: '#F1F5F9', border: '1px solid #CBD5E1', padding: '13px 20px', borderRadius: '10px', fontWeight: '700', fontSize: '0.9rem', color: '#475569', cursor: 'pointer' }}
                 >
                   Cancel
                 </button>
@@ -3715,46 +4260,201 @@ export default function App() {
       {/* MODAL: ORDER SUCCESS & UPI SCANNER                            */}
       {/* ------------------------------------------------------------- */}
       {orderSuccess && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-          <div style={{ background: '#fff', borderRadius: '24px', padding: '30px', maxWidth: '440px', width: '100%', textAlign: 'center' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <div style={{ background: '#fff', borderRadius: '24px', padding: '24px', maxWidth: '440px', width: '100%', maxHeight: '92vh', overflowY: 'auto', textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
             
-            <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#DEF7EC', color: '#03543F', fontSize: '1.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+            {/* Green Checkmark */}
+            <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#DEF7EC', color: '#03543F', fontSize: '1.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
               ✓
             </div>
 
-            <h3 style={{ margin: '0 0 4px', fontSize: '1.4rem', color: '#4A121E', fontWeight: '800' }}>
+            <h3 style={{ margin: '0 0 4px', fontSize: '1.35rem', color: '#4A121E', fontWeight: '800' }}>
               Order Placed Successfully!
             </h3>
             <div style={{ fontSize: '0.85rem', color: '#64748B', marginBottom: '14px' }}>
               Order ID: <b style={{ color: '#4A121E' }}>{orderSuccess.orderId}</b>
             </div>
 
-            <div style={{ background: '#FAF6F0', padding: '12px', borderRadius: '12px', marginBottom: '16px', border: '1px solid #E2E8F0', textAlign: 'left', fontSize: '0.85rem' }}>
-              <div>👤 <b>{orderSuccess.name}</b> (+91 {orderSuccess.phone})</div>
-              <div style={{ color: '#64748B', marginTop: '4px' }}>📍 {orderSuccess.address}</div>
-              <div style={{ marginTop: '8px', borderTop: '1px solid #E2E8F0', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', fontWeight: '800', color: '#4A121E' }}>
+            {/* Order Details Summary Card */}
+            <div style={{ background: '#FAF6F0', padding: '12px 14px', borderRadius: '12px', marginBottom: '16px', border: '1px solid #E2E8F0', textAlign: 'left', fontSize: '0.85rem' }}>
+              <div style={{ fontWeight: '700', color: '#1E293B' }}>
+                👤 {orderSuccess.name} <span style={{ color: '#831843', fontWeight: '800' }}>(+91 {orderSuccess.phone})</span>
+              </div>
+              <div style={{ color: '#64748B', marginTop: '4px', fontSize: '0.8rem' }}>
+                📍 {orderSuccess.address}
+              </div>
+              <div style={{ marginTop: '8px', borderTop: '1px solid #E2E8F0', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: '800', color: '#4A121E' }}>
                 <span>Total Amount:</span>
-                <span>₹{orderSuccess.total.toLocaleString('en-IN')}</span>
+                <span style={{ fontSize: '1.15rem' }}>₹{orderSuccess.total.toLocaleString('en-IN')}</span>
               </div>
             </div>
 
-            {/* UPI QR Code */}
-            {qrDataUrl && (
-              <div style={{ marginBottom: '16px' }}>
-                <div style={{ fontSize: '0.82rem', fontWeight: '800', color: '#4A121E', marginBottom: '8px' }}>
-                  SCAN & PAY VIA ANY UPI APP (GPAY / PHONEPE / PAYTM)
-                </div>
-                <img 
-                  src={qrDataUrl} 
-                  alt="UPI QR Code" 
-                  style={{ width: '190px', height: '190px', border: '2px solid #CBD5E1', borderRadius: '12px' }}
-                />
-                <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '6px' }}>
-                  UPI ID: <b>9343207515@okbizaxis</b>
-                </div>
+            {/* Payment Options Selector: Pay Now or Pay Later */}
+            <div style={{ marginBottom: '16px', textAlign: 'left' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: '800', color: '#4A121E' }}>
+                  PAYMENT DETAILS:
+                </span>
+                <span style={{
+                  fontSize: '0.74rem',
+                  padding: '2px 8px',
+                  borderRadius: '6px',
+                  fontWeight: '800',
+                  background: orderSuccess.paymentStatus === 'PAID' ? '#DEF7EC' : (orderSuccess.paymentStatus === 'PAY_ON_PICKUP' ? '#FEF3C7' : '#F1F5F9'),
+                  color: orderSuccess.paymentStatus === 'PAID' ? '#03543F' : (orderSuccess.paymentStatus === 'PAY_ON_PICKUP' ? '#92400E' : '#475569')
+                }}>
+                  {orderSuccess.paymentStatus === 'PAID' ? '🟢 PAID' : (orderSuccess.paymentStatus === 'PAY_ON_PICKUP' ? '🟠 PAY ON PICKUP' : '⏳ PENDING')}
+                </span>
               </div>
-            )}
 
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+                <button
+                  type="button"
+                  id="modal-pay-now-btn"
+                  onClick={() => setPostOrderPayMode('NOW')}
+                  style={{
+                    padding: '9px 8px',
+                    borderRadius: '8px',
+                    border: postOrderPayMode === 'NOW' ? '2px solid #059669' : '1px solid #CBD5E1',
+                    background: postOrderPayMode === 'NOW' ? '#ECFDF5' : '#fff',
+                    color: postOrderPayMode === 'NOW' ? '#065F46' : '#64748B',
+                    fontWeight: '800',
+                    fontSize: '0.8rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  📱 Pay Now (UPI QR)
+                </button>
+                <button
+                  type="button"
+                  id="modal-pay-later-btn"
+                  onClick={() => setPostOrderPayMode('LATER')}
+                  style={{
+                    padding: '9px 8px',
+                    borderRadius: '8px',
+                    border: postOrderPayMode === 'LATER' ? '2px solid #B45309' : '1px solid #CBD5E1',
+                    background: postOrderPayMode === 'LATER' ? '#FFFBEB' : '#fff',
+                    color: postOrderPayMode === 'LATER' ? '#92400E' : '#64748B',
+                    fontWeight: '800',
+                    fontSize: '0.8rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  💵 Pay Later on Pickup
+                </button>
+              </div>
+
+              {postOrderPayMode === 'NOW' ? (
+                <div style={{ background: '#F0FDF4', border: '1.5px solid #86EFAC', borderRadius: '14px', padding: '14px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.82rem', fontWeight: '800', color: '#166534', marginBottom: '8px' }}>
+                    SCAN & PAY VIA ANY UPI APP (GPAY / PHONEPE / PAYTM)
+                  </div>
+                  
+                  {/* Official Google Pay UPI QR */}
+                  <div style={{ display: 'inline-block', background: '#fff', padding: '10px', borderRadius: '14px', border: '1px solid #CBD5E1', boxShadow: '0 4px 12px rgba(0,0,0,0.06)' }}>
+                    <img 
+                      src="upi_qr.png" 
+                      alt="The Laddu Story Official UPI QR" 
+                      style={{ width: '180px', height: '180px', display: 'block', objectFit: 'contain' }}
+                      onError={(e) => { e.target.src = 'images/TheLadduStory_Logo.jpg'; }}
+                    />
+                  </div>
+
+                  <div style={{ marginTop: '10px', fontSize: '0.82rem', fontWeight: '700', color: '#166534', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                    <span>UPI ID:</span>
+                    <span style={{ fontFamily: 'monospace', background: '#DCFCE7', padding: '3px 8px', borderRadius: '6px', border: '1px solid #86EFAC', fontSize: '0.84rem' }}>
+                      neetikabhasin@okaxis
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText('neetikabhasin@okaxis');
+                        alert('UPI ID copied: neetikabhasin@okaxis');
+                      }}
+                      style={{ background: '#166534', color: '#fff', border: 'none', padding: '3px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: '800', cursor: 'pointer' }}
+                    >
+                      📋 Copy
+                    </button>
+                  </div>
+
+                  <div style={{ marginTop: '10px' }}>
+                    <a
+                      href={`upi://pay?pa=neetikabhasin@okaxis&pn=The%20Laddu%20Story&am=${orderSuccess.total}&cu=INR&tn=${encodeURIComponent(`Order ${orderSuccess.orderId}`)}`}
+                      style={{
+                        display: 'inline-block',
+                        background: '#059669',
+                        color: '#fff',
+                        textDecoration: 'none',
+                        padding: '9px 18px',
+                        borderRadius: '8px',
+                        fontSize: '0.82rem',
+                        fontWeight: '800',
+                        boxShadow: '0 2px 8px rgba(5, 150, 105, 0.35)'
+                      }}
+                    >
+                      ⚡ Tap to Pay ₹{orderSuccess.total.toLocaleString('en-IN')} via UPI App
+                    </a>
+                  </div>
+
+                  <div style={{ marginTop: '12px', borderTop: '1px dashed #86EFAC', paddingTop: '10px' }}>
+                    <input
+                      type="text"
+                      placeholder="UPI Transaction ID / UTR (Optional)"
+                      value={postOrderUtr}
+                      onChange={e => setPostOrderUtr(e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: '6px', border: '1px solid #86EFAC', fontSize: '0.8rem', background: '#fff', marginBottom: '8px' }}
+                    />
+                    <button
+                      type="button"
+                      id="confirm-upi-paid-btn"
+                      onClick={handleConfirmPaidOnline}
+                      style={{
+                        width: '100%',
+                        background: '#166534',
+                        color: '#fff',
+                        border: 'none',
+                        padding: '10px',
+                        borderRadius: '8px',
+                        fontWeight: '800',
+                        fontSize: '0.85rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ✓ I Have Paid via UPI (Record Payment)
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: '14px', padding: '14px' }}>
+                  <div style={{ fontWeight: '800', fontSize: '0.86rem', color: '#92400E', marginBottom: '4px' }}>
+                    📍 Pay on Pickup at Bangalore Kitchen
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: '#78350F', lineHeight: 1.4, marginBottom: '12px' }}>
+                    You can pay <b>₹{orderSuccess.total.toLocaleString('en-IN')}</b> in <b>Cash</b> or via <b>UPI</b> when collecting your order at our kitchen counter.
+                  </div>
+                  <button
+                    type="button"
+                    id="confirm-pickup-pay-btn"
+                    onClick={handleConfirmPayLater}
+                    style={{
+                      width: '100%',
+                      background: '#B45309',
+                      color: '#fff',
+                      border: 'none',
+                      padding: '10px',
+                      borderRadius: '8px',
+                      fontWeight: '800',
+                      fontSize: '0.85rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    💵 Confirm Pay on Pickup (Cash / UPI)
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Navigation buttons */}
             <div style={{ display: 'flex', gap: '10px' }}>
               <button
                 onClick={() => {
