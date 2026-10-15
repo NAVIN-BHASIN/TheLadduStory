@@ -16,17 +16,10 @@ import {
   deleteOrderInSupabase,
   subscribeToSupabaseRealtime,
   verifyCustomerPassword,
-  setCustomerPasswordInSupabase
+  setCustomerPasswordInSupabase,
+  registerCustomerInSupabase,
+  updateCustomerDetailsInSupabase
 } from './services/supabaseClient';
-
-import {
-  isFirebaseConfigured,
-  getFirebaseConfig,
-  saveFirebaseConfig,
-  setupRecaptchaVerifier,
-  sendFirebaseSmsOtp,
-  verifyFirebaseSmsOtp
-} from './services/firebaseAuth';
 
 // OFFICIAL GOOGLE FORM CONFIGURATION (HEADLESS SYNC TO GOOGLE SHEETS)
 const GOOGLE_FORM_ACTION_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSfLHmLxHakS6sZEO4ypQtkdHPzeCwg3D8LRhTYA3t74-EmUMA/formResponse';
@@ -366,32 +359,33 @@ export default function App() {
   });
 
   const [showCustomerLoginModal, setShowCustomerLoginModal] = useState(false);
-    const [loginPhoneInput, setLoginPhoneInput] = useState('');
-  const [loginNameInput, setLoginNameInput] = useState('');
   const [isCustomerLoggingIn, setIsCustomerLoggingIn] = useState(false);
 
-  // Dual Authentication State: 'OTP' (Google Firebase SMS OTP) vs 'PASSWORD' (Supabase Password/PIN)
-  const [authMode, setAuthMode] = useState('OTP'); // 'OTP' | 'PASSWORD'
+    // =========================================================================
+  // PATRON ACCOUNT PORTAL STATE (Mobile + Password / 4-Digit Security PIN)
+  // =========================================================================
+  const [authMode, setAuthMode] = useState('SIGNIN'); // 'SIGNIN' | 'REGISTER'
+  
+  // Sign-In Form State
+  const [loginPhoneInput, setLoginPhoneInput] = useState('');
   const [loginPasswordInput, setLoginPasswordInput] = useState('');
+  
+  // Registration Form State
+  const [regName, setRegName] = useState('');
+  const [regPhone, setRegPhone] = useState('');
+  const [regAddress, setRegAddress] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regConfirmPassword, setRegConfirmPassword] = useState('');
+  
+  // Modals for editing Profile / Password
   const [showSetPasswordModal, setShowSetPasswordModal] = useState(false);
   const [newPasswordInput, setNewPasswordInput] = useState('');
   const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
   const [isSavingPassword, setIsSavingPassword] = useState(false);
-  const [firebaseConfirmation, setFirebaseConfirmation] = useState(null);
-
-  // Phone SMS OTP Authentication State
-  const [otpStep, setOtpStep] = useState('PHONE'); // 'PHONE' | 'OTP'
-  const [generatedOtp, setGeneratedOtp] = useState('');
-  const [enteredOtp, setEnteredOtp] = useState('');
-  const [otpCountdown, setOtpCountdown] = useState(0);
-
-  // OTP Countdown Timer
-  useEffect(() => {
-    if (otpCountdown > 0) {
-      const timer = setTimeout(() => setOtpCountdown(otpCountdown - 1), 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [otpCountdown]);
+  
+  const [showAddressModal, setShowAddressModal] = useState(false);
+  const [editAddressInput, setEditAddressInput] = useState('');
+  const [isSavingAddress, setIsSavingAddress] = useState(false);
 
   // Cart & Order Form State
   const [cart, setCart] = useState([]);
@@ -633,11 +627,11 @@ export default function App() {
     return { valid: true, clean };
   };
 
-  // =========================================================================
-  // DUAL AUTHENTICATION HANDLERS: PASSWORD LOGIN & GOOGLE FIREBASE SMS OTP
+    // =========================================================================
+  // PATRON AUTHENTICATION HANDLERS: PURE MOBILE + PASSWORD CRM ENGINE
   // =========================================================================
 
-  // 1. PASSWORD SIGN-IN (Direct Supabase Validation)
+  // 1. RETURNING PATRON SIGN-IN
   const handlePasswordLogin = async (e) => {
     if (e) e.preventDefault();
     const valResult = validateIndianMobile(loginPhoneInput);
@@ -646,7 +640,7 @@ export default function App() {
       return;
     }
     if (!loginPasswordInput || loginPasswordInput.trim().length === 0) {
-      alert('Please enter your password or security PIN.');
+      alert('Please enter your password or 4-digit PIN.');
       return;
     }
 
@@ -655,10 +649,9 @@ export default function App() {
 
     try {
       if (!isSupabaseConfigured()) {
-        // Fallback for offline/demo
         const profile = {
           phone: clean,
-          name: loginNameInput.trim() || 'Valued Patron',
+          name: 'Valued Patron',
           address: '',
           verifiedVia: 'PASSWORD',
           loggedInAt: new Date().toISOString()
@@ -688,172 +681,108 @@ export default function App() {
 
         setCustomerUser(profile);
         localStorage.setItem('tls_active_customer', JSON.stringify(profile));
+        
+        // Auto-fill checkout fields for convenience
+        setCustName(profile.name);
+        setCustPhone(profile.phone);
+        setCustAddress(profile.address);
+
         setShowCustomerLoginModal(false);
         setActiveTab('track');
       } else if (res.reason === 'NO_PASSWORD_SET') {
-        alert(`Notice: No password has been created for +91 ${clean} yet.\n\nSwitching you to SMS OTP sign-in. Once signed in, you can set your password!`);
-        setAuthMode('OTP');
-        setOtpStep('PHONE');
+        const goReg = window.confirm(
+          `Notice: No password found for +91 ${clean}.\n\nWould you like to open the Registration tab to create your patron account & password in 10 seconds?`
+        );
+        if (goReg) {
+          setRegPhone(clean);
+          setAuthMode('REGISTER');
+        }
       } else if (res.reason === 'WRONG_PASSWORD') {
-        alert(`❌ Incorrect password for +91 ${clean}. Please try again or click "Forgot? Use OTP" to sign in.`);
+        alert(`❌ Incorrect password or PIN for +91 ${clean}. Please check and try again.`);
       } else if (res.reason === 'NOT_FOUND') {
-        alert(`❌ Mobile Number Not Recognized: No patron account or orders found in Supabase database for +91 ${clean}.\n\nPlease check your mobile number or place an order first.`);
+        const goReg = window.confirm(
+          `No account found for +91 ${clean}.\n\nWould you like to register now and get your personal patron portal?`
+        );
+        if (goReg) {
+          setRegPhone(clean);
+          setAuthMode('REGISTER');
+        }
       } else {
-        alert('Authentication failed. Please verify your credentials or use SMS OTP.');
+        alert('Authentication error. Please check your mobile number and password.');
       }
     } catch (err) {
-      console.error('Password login error:', err);
-      alert('Error verifying credentials. Please try again.');
+      console.error('Sign-in error:', err);
+      alert('Error signing in. Please try again.');
     } finally {
       setIsCustomerLoggingIn(false);
     }
   };
 
-  // 2. DISPATCH SMS OTP (Google Firebase Phone Auth + Fallback Simulation)
-  const handleSendSmsOtp = async (e) => {
+  // 2. NEW PATRON REGISTRATION
+  const handleRegisterCustomer = async (e) => {
     if (e) e.preventDefault();
-    const valResult = validateIndianMobile(loginPhoneInput);
+    if (!regName || regName.trim().length === 0) {
+      alert('Please enter your full name.');
+      return;
+    }
+    const valResult = validateIndianMobile(regPhone);
     if (!valResult.valid) {
       alert('❌ ' + valResult.error);
       return;
     }
-    const clean = valResult.clean;
-
-    setIsCustomerLoggingIn(true);
-    try {
-      // Supabase existence check
-      if (isSupabaseConfigured()) {
-        const dbCust = await lookupCustomerInSupabase(clean);
-        const dbOrders = await fetchOrdersFromSupabase();
-        const hasOrders = (dbOrders || []).some(o => (o.phone || '').replace(/\D/g, '').slice(-10) === clean);
-
-        if (!dbCust && !hasOrders) {
-          alert(`❌ Mobile Number Not Recognized: No patron account or orders found in Supabase database for +91 ${clean}.\n\nPlease ensure you enter the valid mobile number used during order placement.`);
-          setIsCustomerLoggingIn(false);
-          return;
-        }
-
-        if (dbCust && dbCust.name && !loginNameInput) {
-          setLoginNameInput(dbCust.name);
-        }
-      }
-
-      // Initialize reCAPTCHA
-      let verifier = null;
-      try {
-        verifier = setupRecaptchaVerifier('recaptcha-container');
-      } catch (e) {}
-
-      // Dispatch SMS OTP via Google Firebase
-      const smsRes = await sendFirebaseSmsOtp(clean, verifier);
-
-      if (smsRes.success) {
-        if (smsRes.mode === 'LIVE') {
-          setFirebaseConfirmation(smsRes.confirmationResult);
-        } else {
-          // Demo / Sandbox mode
-          setGeneratedOtp(smsRes.demoCode);
-          console.log(`%c[Firebase SMS OTP - Demo Simulation] Code for +91 ${clean}: ${smsRes.demoCode}`, 'color: #15803D; font-weight: bold; font-size: 15px;');
-        }
-        setEnteredOtp('');
-        setOtpStep('OTP');
-        setOtpCountdown(45);
-      } else {
-        const errMsg = smsRes.error || 'Failed to dispatch SMS OTP.';
-        console.warn('[Firebase Auth Note]:', errMsg);
-
-        // If Firebase Phone Auth is pending or disabled, offer seamless test bypass
-        const shouldBypass = window.confirm(
-          `⚠️ Firebase Notice: ${errMsg}\n\nWould you like to test immediately using Sandbox Test Mode (code: 123456) so you can test patron tracking without waiting?`
-        );
-
-        if (shouldBypass) {
-          const testCode = '123456';
-          setGeneratedOtp(testCode);
-          setEnteredOtp('');
-          setOtpStep('OTP');
-          setOtpCountdown(45);
-          alert(`🟢 Test Mode Active: Your test code is 123456. Enter it on the next screen to sign in.`);
-        }
-      }
-    } catch (err) {
-      console.error('SMS OTP generation error:', err);
-      alert('Unable to dispatch SMS verification code. Please try again.');
-    } finally {
-      setIsCustomerLoggingIn(false);
+    if (!regAddress || regAddress.trim().length === 0) {
+      alert('Please enter your delivery address.');
+      return;
     }
-  };
-
-  // 3. VERIFY SMS OTP CODE
-  const handleVerifySmsOtp = async (e) => {
-    if (e) e.preventDefault();
-    if (!enteredOtp || enteredOtp.trim().length < 4) {
-      alert('❌ Please enter the full verification code sent to your mobile phone.');
+    if (!regPassword || regPassword.trim().length < 4) {
+      alert('Password / PIN must be at least 4 characters or digits.');
+      return;
+    }
+    if (regPassword !== regConfirmPassword) {
+      alert('Passwords do not match. Please re-enter.');
       return;
     }
 
-    const clean = loginPhoneInput.replace(/\D/g, '').slice(-10);
+    const clean = valResult.clean;
     setIsCustomerLoggingIn(true);
 
     try {
-      // If live Firebase confirmation is present
-      if (firebaseConfirmation && firebaseConfirmation.confirm) {
-        try {
-          await verifyFirebaseSmsOtp(firebaseConfirmation, enteredOtp.trim());
-        } catch (firebaseErr) {
-          alert('❌ Invalid or expired SMS code. Please check the code received on your phone.');
-          setIsCustomerLoggingIn(false);
-          return;
-        }
-      } else {
-        // Demo simulation check
-        if (enteredOtp.trim() !== generatedOtp.trim()) {
-          alert('❌ Incorrect OTP code. Please enter the valid verification code.');
-          setIsCustomerLoggingIn(false);
-          return;
-        }
-      }
-
-      let customerRecord = null;
-      let customerOrders = [];
-
-      if (isSupabaseConfigured()) {
-        customerRecord = await lookupCustomerInSupabase(clean);
-        const dbOrders = await fetchOrdersFromSupabase();
-        if (dbOrders) {
-          customerOrders = dbOrders.filter(o => (o.phone || '').replace(/\D/g, '').slice(-10) === clean);
-        }
-      } else {
-        customerOrders = orders.filter(o => (o.phone || '').replace(/\D/g, '').slice(-10) === clean);
-      }
-
-      const resolvedName = customerRecord?.name || customerOrders[0]?.name || loginNameInput.trim() || 'Valued Patron';
-      const resolvedAddr = customerRecord?.address || customerOrders[0]?.address || '';
+      const res = await registerCustomerInSupabase({
+        phone: clean,
+        name: regName.trim(),
+        address: regAddress.trim(),
+        password: regPassword.trim()
+      });
 
       const profile = {
         phone: clean,
-        name: resolvedName,
-        address: resolvedAddr,
-        verifiedVia: 'FIREBASE_SMS_OTP',
-        hasPassword: !!customerRecord?.password_hash,
+        name: regName.trim(),
+        address: regAddress.trim(),
+        verifiedVia: 'PASSWORD',
+        hasPassword: true,
         loggedInAt: new Date().toISOString()
       };
 
       setCustomerUser(profile);
       localStorage.setItem('tls_active_customer', JSON.stringify(profile));
+
+      // Auto-populate checkout inputs
+      setCustName(profile.name);
+      setCustPhone(profile.phone);
+      setCustAddress(profile.address);
+
       setShowCustomerLoginModal(false);
-      setOtpStep('PHONE');
-      setGeneratedOtp('');
       setActiveTab('track');
+      alert(`👑 Welcome to The Laddu Story, ${regName.trim()}! Your patron account is ready.`);
     } catch (err) {
-      console.error('Customer login error:', err);
-      alert('Error verifying customer account. Please try again.');
+      console.error('Registration error:', err);
+      alert('Error creating account. Please try again.');
     } finally {
       setIsCustomerLoggingIn(false);
     }
   };
 
-  // 4. SET / UPDATE PASSWORD IN SUPABASE
+  // 3. SET / UPDATE PASSWORD IN SUPABASE
   const handleSaveCustomerPassword = async (e) => {
     if (e) e.preventDefault();
     if (!newPasswordInput || newPasswordInput.trim().length < 4) {
@@ -864,9 +793,8 @@ export default function App() {
       alert('Passwords do not match. Please re-enter.');
       return;
     }
-
     if (!customerUser || !customerUser.phone) {
-      alert('Please sign in first to set a password.');
+      alert('Please sign in first to update your password.');
       return;
     }
 
@@ -884,17 +812,44 @@ export default function App() {
       }
     } catch (err) {
       console.error('Set password error:', err);
-      alert('Error saving password to Supabase.');
+      alert('Error saving password.');
     } finally {
       setIsSavingPassword(false);
     }
   };
 
-  const handleSendWhatsAppOtp = handleSendSmsOtp;
-  const handleVerifyWhatsAppOtp = handleVerifySmsOtp;
+  // 4. UPDATE DELIVERY ADDRESS IN SUPABASE
+  const handleSaveDeliveryAddress = async (e) => {
+    if (e) e.preventDefault();
+    if (!editAddressInput || editAddressInput.trim().length === 0) {
+      alert('Please enter a valid address.');
+      return;
+    }
+    if (!customerUser || !customerUser.phone) return;
+
+    setIsSavingAddress(true);
+    try {
+      await updateCustomerDetailsInSupabase(customerUser.phone, {
+        name: customerUser.name,
+        address: editAddressInput.trim()
+      });
+
+      const updated = { ...customerUser, address: editAddressInput.trim() };
+      setCustomerUser(updated);
+      localStorage.setItem('tls_active_customer', JSON.stringify(updated));
+      setCustAddress(editAddressInput.trim());
+      setShowAddressModal(false);
+      alert('✅ Delivery address updated successfully!');
+    } catch(err) {
+      console.error('Address update error:', err);
+      alert('Error updating delivery address.');
+    } finally {
+      setIsSavingAddress(false);
+    }
+  };
 
   // Fallback for direct submit
-  const handleCustomerLogin = handleSendWhatsAppOtp;
+  const handleCustomerLogin = handlePasswordLogin;
 
   const handleCustomerLogout = () => {
     setCustomerUser(null);
@@ -1928,11 +1883,18 @@ export default function App() {
                       + Place New Order
                     </button>
                     <button
+                      id="track-edit-addr-btn"
+                      onClick={() => { setEditAddressInput(customerUser.address || ''); setShowAddressModal(true); }}
+                      style={{ background: '#FAF6F0', border: '1.5px solid #B45309', padding: '9px 14px', borderRadius: '8px', fontWeight: '800', fontSize: '0.85rem', color: '#4A121E', cursor: 'pointer' }}
+                    >
+                      📍 Edit Address
+                    </button>
+                    <button
                       id="track-set-password-btn"
                       onClick={() => setShowSetPasswordModal(true)}
                       style={{ background: '#FAF6F0', border: '1.5px solid #B45309', padding: '9px 14px', borderRadius: '8px', fontWeight: '800', fontSize: '0.85rem', color: '#4A121E', cursor: 'pointer' }}
                     >
-                      🔑 Set / Change Password
+                      🔑 Change Password
                     </button>
                     <button
                       id="track-switch-user-btn"
@@ -2098,17 +2060,17 @@ export default function App() {
                 </div>
 
                 <h2 className="royal-title" style={{ fontSize: '1.8rem', fontWeight: '700', color: '#4A121E', margin: '0 0 8px' }}>
-                  Patron Sign-In & Live Tracker
+                  Patron Portal & Order Tracker
                 </h2>
                 <p style={{ fontSize: '0.88rem', color: '#64748B', margin: '0 auto 20px', lineHeight: 1.5 }}>
-                  Access live cow ghee preparation updates, order history & fast-track reordering.
+                  Access live cow ghee preparation updates, order history & express checkout.
                 </p>
 
-                {/* DUAL AUTHENTICATION TABS */}
+                {/* ROYAL PATRON PORTAL TABS */}
                 <div style={{ display: 'flex', background: '#F1F5F9', padding: '4px', borderRadius: '12px', marginBottom: '22px', border: '1px solid rgba(180, 83, 9, 0.15)' }}>
                   <button
                     type="button"
-                    onClick={() => { setAuthMode('OTP'); setOtpStep('PHONE'); }}
+                    onClick={() => setAuthMode('SIGNIN')}
                     style={{
                       flex: 1,
                       padding: '11px',
@@ -2117,17 +2079,17 @@ export default function App() {
                       fontWeight: '800',
                       fontSize: '0.9rem',
                       cursor: 'pointer',
-                      background: authMode === 'OTP' ? 'linear-gradient(135deg, #4A121E 0%, #831843 100%)' : 'transparent',
-                      color: authMode === 'OTP' ? '#FFFBEB' : '#64748B',
-                      boxShadow: authMode === 'OTP' ? '0 2px 8px rgba(74, 18, 30, 0.25)' : 'none',
+                      background: authMode === 'SIGNIN' ? 'linear-gradient(135deg, #4A121E 0%, #831843 100%)' : 'transparent',
+                      color: authMode === 'SIGNIN' ? '#FFFBEB' : '#64748B',
+                      boxShadow: authMode === 'SIGNIN' ? '0 2px 8px rgba(74, 18, 30, 0.25)' : 'none',
                       transition: 'all 0.2s ease'
                     }}
                   >
-                    📲 Fast SMS OTP
+                    🔑 Sign In
                   </button>
                   <button
                     type="button"
-                    onClick={() => setAuthMode('PASSWORD')}
+                    onClick={() => setAuthMode('REGISTER')}
                     style={{
                       flex: 1,
                       padding: '11px',
@@ -2136,29 +2098,29 @@ export default function App() {
                       fontWeight: '800',
                       fontSize: '0.9rem',
                       cursor: 'pointer',
-                      background: authMode === 'PASSWORD' ? 'linear-gradient(135deg, #4A121E 0%, #831843 100%)' : 'transparent',
-                      color: authMode === 'PASSWORD' ? '#FFFBEB' : '#64748B',
-                      boxShadow: authMode === 'PASSWORD' ? '0 2px 8px rgba(74, 18, 30, 0.25)' : 'none',
+                      background: authMode === 'REGISTER' ? 'linear-gradient(135deg, #4A121E 0%, #831843 100%)' : 'transparent',
+                      color: authMode === 'REGISTER' ? '#FFFBEB' : '#64748B',
+                      boxShadow: authMode === 'REGISTER' ? '0 2px 8px rgba(74, 18, 30, 0.25)' : 'none',
                       transition: 'all 0.2s ease'
                     }}
                   >
-                    🔑 User ID & Password
+                    ✨ Create New Account
                   </button>
                 </div>
 
-                {authMode === 'PASSWORD' ? (
-                  /* ================= MODE A: PASSWORD LOGIN ================= */
+                {authMode === 'SIGNIN' ? (
+                  /* ================= TAB 1: SIGN IN ================= */
                   <form onSubmit={handlePasswordLogin} style={{ textAlign: 'left' }}>
                     <div style={{ marginBottom: '16px' }}>
                       <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '800', color: '#4A121E', marginBottom: '6px', letterSpacing: '0.5px' }}>
-                        10-DIGIT MOBILE NUMBER / USER ID *
+                        10-DIGIT MOBILE NUMBER *
                       </label>
                       <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid rgba(180, 83, 9, 0.3)', borderRadius: '10px', overflow: 'hidden', background: '#FAF6F0' }}>
                         <span style={{ padding: '12px 14px', background: 'rgba(180, 83, 9, 0.1)', color: '#4A121E', fontWeight: '800', fontSize: '0.95rem', borderRight: '1px solid rgba(180, 83, 9, 0.2)' }}>
                           🇮🇳 +91
                         </span>
                         <input
-                          id="track-login-phone-pwd"
+                          id="track-signin-phone"
                           type="tel"
                           placeholder="e.g. 9686412342"
                           value={loginPhoneInput}
@@ -2170,20 +2132,11 @@ export default function App() {
                     </div>
 
                     <div style={{ marginBottom: '20px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                        <label style={{ fontSize: '0.78rem', fontWeight: '800', color: '#4A121E', letterSpacing: '0.5px' }}>
-                          PASSWORD / SECURITY PIN *
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => { setAuthMode('OTP'); setOtpStep('PHONE'); }}
-                          style={{ background: 'transparent', border: 'none', color: '#B45309', fontSize: '0.78rem', fontWeight: '800', cursor: 'pointer', padding: 0 }}
-                        >
-                          Forgot? Sign in with OTP →
-                        </button>
-                      </div>
+                      <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '800', color: '#4A121E', marginBottom: '6px', letterSpacing: '0.5px' }}>
+                        PASSWORD / 4-DIGIT PIN *
+                      </label>
                       <input
-                        id="track-login-password-input"
+                        id="track-signin-pwd"
                         type="password"
                         placeholder="Enter your security password or PIN"
                         value={loginPasswordInput}
@@ -2194,7 +2147,7 @@ export default function App() {
                     </div>
 
                     <button
-                      id="track-password-submit-btn"
+                      id="track-signin-submit-btn"
                       type="submit"
                       disabled={isCustomerLoggingIn}
                       style={{
@@ -2210,153 +2163,135 @@ export default function App() {
                         boxShadow: '0 4px 14px rgba(74, 18, 30, 0.3)'
                       }}
                     >
-                      {isCustomerLoggingIn ? '⏳ Verifying Credentials...' : '🔑 Sign In with Password →'}
+                      {isCustomerLoggingIn ? '⏳ Signing In...' : '🔑 Sign In to Patron Account →'}
                     </button>
 
-                    <div style={{ marginTop: '16px', fontSize: '0.75rem', color: '#78350F', background: '#FFFBEB', padding: '10px 14px', borderRadius: '8px', border: '1px solid #FDE68A', textAlign: 'center' }}>
-                      ✨ <b>Instant Password Access:</b> No SMS needed. First-time patrons without a password can click <b>"Fast SMS OTP"</b> to sign in and set their PIN.
+                    <div style={{ marginTop: '16px', textAlign: 'center', fontSize: '0.82rem', color: '#64748B' }}>
+                      New to The Laddu Story?{' '}
+                      <button
+                        type="button"
+                        onClick={() => { setRegPhone(loginPhoneInput); setAuthMode('REGISTER'); }}
+                        style={{ background: 'transparent', border: 'none', color: '#B45309', fontWeight: '800', cursor: 'pointer', padding: 0 }}
+                      >
+                        Create your account here →
+                      </button>
                     </div>
                   </form>
                 ) : (
-                  /* ================= MODE B: SMS OTP (GOOGLE FIREBASE) ================= */
-                  otpStep === 'PHONE' ? (
-                    <form onSubmit={handleSendSmsOtp} style={{ textAlign: 'left' }}>
-                      <div style={{ marginBottom: '16px' }}>
-                        <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '800', color: '#4A121E', marginBottom: '6px', letterSpacing: '0.5px' }}>
-                          10-DIGIT MOBILE NUMBER *
-                        </label>
-                        <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid rgba(180, 83, 9, 0.3)', borderRadius: '10px', overflow: 'hidden', background: '#FAF6F0' }}>
-                          <span style={{ padding: '12px 14px', background: 'rgba(180, 83, 9, 0.1)', color: '#4A121E', fontWeight: '800', fontSize: '0.95rem', borderRight: '1px solid rgba(180, 83, 9, 0.2)' }}>
-                            🇮🇳 +91
-                          </span>
-                          <input
-                            id="customer-login-phone-input"
-                            type="tel"
-                            placeholder="e.g. 9686412341 or 9686412342"
-                            value={loginPhoneInput}
-                            onChange={e => setLoginPhoneInput(e.target.value)}
-                            required
-                            style={{ width: '100%', boxSizing: 'border-box', padding: '12px 14px', border: 'none', background: 'transparent', fontSize: '1.05rem', fontWeight: '700', color: '#4A121E', outline: 'none' }}
-                          />
-                        </div>
-                      </div>
+                  /* ================= TAB 2: CREATE NEW ACCOUNT ================= */
+                  <form onSubmit={handleRegisterCustomer} style={{ textAlign: 'left' }}>
+                    <div style={{ marginBottom: '14px' }}>
+                      <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px', letterSpacing: '0.5px' }}>
+                        FULL PATRON NAME *
+                      </label>
+                      <input
+                        id="track-reg-name"
+                        type="text"
+                        placeholder="e.g. Navin Bhasin"
+                        value={regName}
+                        onChange={e => setRegName(e.target.value)}
+                        required
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '11px 13px', borderRadius: '8px', border: '1.5px solid rgba(180, 83, 9, 0.3)', background: '#FAF6F0', fontSize: '0.95rem', color: '#4A121E' }}
+                      />
+                    </div>
 
-                      <div style={{ marginBottom: '20px' }}>
-                        <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '800', color: '#4A121E', marginBottom: '6px', letterSpacing: '0.5px' }}>
-                          PATRON NAME (OPTIONAL)
-                        </label>
+                    <div style={{ marginBottom: '14px' }}>
+                      <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px', letterSpacing: '0.5px' }}>
+                        10-DIGIT MOBILE NUMBER *
+                      </label>
+                      <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid rgba(180, 83, 9, 0.3)', borderRadius: '8px', overflow: 'hidden', background: '#FAF6F0' }}>
+                        <span style={{ padding: '11px 13px', background: 'rgba(180, 83, 9, 0.1)', color: '#4A121E', fontWeight: '800', fontSize: '0.9rem', borderRight: '1px solid rgba(180, 83, 9, 0.2)' }}>
+                          🇮🇳 +91
+                        </span>
                         <input
-                          id="customer-login-name-input"
-                          type="text"
-                          placeholder="Auto-recognized if returning patron"
-                          value={loginNameInput}
-                          onChange={e => setLoginNameInput(e.target.value)}
-                          style={{ width: '100%', boxSizing: 'border-box', padding: '12px 14px', borderRadius: '10px', border: '1.5px solid rgba(180, 83, 9, 0.3)', background: '#FAF6F0', fontSize: '0.95rem', color: '#4A121E' }}
+                          id="track-reg-phone"
+                          type="tel"
+                          placeholder="e.g. 9686412342"
+                          value={regPhone}
+                          onChange={e => setRegPhone(e.target.value)}
+                          required
+                          style={{ width: '100%', boxSizing: 'border-box', padding: '11px 13px', border: 'none', background: 'transparent', fontSize: '1rem', fontWeight: '700', color: '#4A121E', outline: 'none' }}
                         />
                       </div>
+                    </div>
 
-                      <button
-                        id="customer-login-submit-btn"
-                        type="submit"
-                        disabled={isCustomerLoggingIn}
-                        style={{
-                          width: '100%',
-                          background: 'linear-gradient(135deg, #15803D 0%, #16A34A 100%)',
-                          color: '#fff',
-                          border: '1px solid #14532D',
-                          padding: '14px',
-                          borderRadius: '10px',
-                          fontWeight: '800',
-                          fontSize: '1rem',
-                          cursor: isCustomerLoggingIn ? 'not-allowed' : 'pointer',
-                          boxShadow: '0 4px 14px rgba(22, 163, 74, 0.3)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '8px'
-                        }}
-                      >
-                        <span>📲</span>
-                        <span>{isCustomerLoggingIn ? 'Dispatching SMS OTP...' : 'Send SMS OTP to Device →'}</span>
-                      </button>
+                    <div style={{ marginBottom: '14px' }}>
+                      <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px', letterSpacing: '0.5px' }}>
+                        DELIVERY ADDRESS *
+                      </label>
+                      <textarea
+                        id="track-reg-addr"
+                        rows="2"
+                        placeholder="Apartment/Villa, Street, Landmark, City & Pincode"
+                        value={regAddress}
+                        onChange={e => setRegAddress(e.target.value)}
+                        required
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid rgba(180, 83, 9, 0.3)', background: '#FAF6F0', fontSize: '0.9rem', color: '#4A121E', resize: 'vertical' }}
+                      />
+                    </div>
 
-                      <div style={{ marginTop: '16px', fontSize: '0.75rem', color: '#78350F', background: '#FFFBEB', padding: '10px 14px', borderRadius: '8px', border: '1px solid #FDE68A', textAlign: 'center' }}>
-                        🌿 <b>Official Google Firebase SMS:</b> Verification code is dispatched straight to your phone's carrier SMS inbox.
-                      </div>
-                    </form>
-                  ) : (
-                    /* STEP 2: ENTER OTP */
-                    <form onSubmit={handleVerifySmsOtp} style={{ textAlign: 'left' }}>
-                      <div style={{ background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: '14px', padding: '16px', marginBottom: '20px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '0.75rem', color: '#92400E', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
-                          🔒 Security Verification
-                        </div>
-                        <div style={{ fontSize: '0.85rem', color: '#4A121E', fontWeight: '700', margin: '4px 0' }}>
-                          Verification code dispatched via SMS to:
-                        </div>
-                        <div style={{ fontSize: '1.25rem', fontWeight: '900', color: '#B45309', letterSpacing: '1px' }}>
-                          🇮🇳 +91 {loginPhoneInput.replace(/\D/g, '').slice(-10)}
-                        </div>
-                        <div style={{ fontSize: '0.75rem', color: '#78350F', marginTop: '8px', lineHeight: 1.4 }}>
-                          Please check the SMS received on your phone and enter the code below.
-                        </div>
-                      </div>
-
-                      <div style={{ marginBottom: '18px' }}>
-                        <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '800', color: '#4A121E', marginBottom: '6px', textAlign: 'center' }}>
-                          ENTER VERIFICATION CODE
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '18px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px' }}>
+                          PASSWORD / PIN *
                         </label>
                         <input
-                          id="customer-login-otp-input"
-                          type="text"
-                          maxLength="6"
-                          placeholder="• • • • • •"
-                          value={enteredOtp}
-                          onChange={e => setEnteredOtp(e.target.value.replace(/\D/g, ''))}
-                          autoFocus
-                          style={{ width: '100%', boxSizing: 'border-box', padding: '14px', borderRadius: '10px', border: '2px solid #B45309', fontSize: '1.6rem', fontWeight: '800', textAlign: 'center', letterSpacing: '10px', background: '#FAF6F0', color: '#4A121E', outline: 'none' }}
+                          id="track-reg-pwd"
+                          type="password"
+                          placeholder="Min 4 digits"
+                          value={regPassword}
+                          onChange={e => setRegPassword(e.target.value)}
+                          required
+                          style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid rgba(180, 83, 9, 0.3)', background: '#FAF6F0', fontSize: '0.9rem', color: '#4A121E' }}
                         />
                       </div>
-
-                      <button
-                        id="customer-login-verify-btn"
-                        type="submit"
-                        disabled={enteredOtp.length < 4 || isCustomerLoggingIn}
-                        style={{
-                          width: '100%',
-                          background: (enteredOtp.length < 4 || isCustomerLoggingIn) ? '#94A3B8' : 'linear-gradient(135deg, #4A121E 0%, #831843 100%)',
-                          color: '#fff',
-                          border: '1px solid #B45309',
-                          padding: '14px',
-                          borderRadius: '10px',
-                          fontWeight: '800',
-                          fontSize: '1rem',
-                          cursor: (enteredOtp.length < 4 || isCustomerLoggingIn) ? 'not-allowed' : 'pointer',
-                          boxShadow: '0 4px 14px rgba(74, 18, 30, 0.3)'
-                        }}
-                      >
-                        {isCustomerLoggingIn ? '⏳ Verifying...' : '✓ Verify Code & Sign In'}
-                      </button>
-
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', fontSize: '0.8rem' }}>
-                        <button
-                          type="button"
-                          onClick={() => { setOtpStep('PHONE'); setEnteredOtp(''); }}
-                          style={{ background: 'transparent', border: 'none', color: '#831843', fontWeight: '700', cursor: 'pointer', padding: 0 }}
-                        >
-                          ← Change Number
-                        </button>
-                        <button
-                          type="button"
-                          disabled={otpCountdown > 0}
-                          onClick={handleSendSmsOtp}
-                          style={{ background: 'transparent', border: 'none', color: otpCountdown > 0 ? '#94A3B8' : '#B45309', fontWeight: '700', cursor: otpCountdown > 0 ? 'default' : 'pointer', padding: 0 }}
-                        >
-                          {otpCountdown > 0 ? `Resend in ${otpCountdown}s` : 'Resend SMS Code'}
-                        </button>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px' }}>
+                          CONFIRM *
+                        </label>
+                        <input
+                          id="track-reg-conf-pwd"
+                          type="password"
+                          placeholder="Re-enter PIN"
+                          value={regConfirmPassword}
+                          onChange={e => setRegConfirmPassword(e.target.value)}
+                          required
+                          style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid rgba(180, 83, 9, 0.3)', background: '#FAF6F0', fontSize: '0.9rem', color: '#4A121E' }}
+                        />
                       </div>
-                    </form>
-                  )
+                    </div>
+
+                    <button
+                      id="track-reg-submit-btn"
+                      type="submit"
+                      disabled={isCustomerLoggingIn}
+                      style={{
+                        width: '100%',
+                        background: 'linear-gradient(135deg, #15803D 0%, #16A34A 100%)',
+                        color: '#fff',
+                        border: '1px solid #14532D',
+                        padding: '14px',
+                        borderRadius: '10px',
+                        fontWeight: '800',
+                        fontSize: '1rem',
+                        cursor: isCustomerLoggingIn ? 'not-allowed' : 'pointer',
+                        boxShadow: '0 4px 14px rgba(22, 163, 74, 0.3)'
+                      }}
+                    >
+                      {isCustomerLoggingIn ? '⏳ Creating Account...' : '👑 Create Patron Account & Continue →'}
+                    </button>
+
+                    <div style={{ marginTop: '14px', textAlign: 'center', fontSize: '0.82rem', color: '#64748B' }}>
+                      Already have an account?{' '}
+                      <button
+                        type="button"
+                        onClick={() => { setLoginPhoneInput(regPhone); setAuthMode('SIGNIN'); }}
+                        style={{ background: 'transparent', border: 'none', color: '#B45309', fontWeight: '800', cursor: 'pointer', padding: 0 }}
+                      >
+                        Sign in here →
+                      </button>
+                    </div>
+                  </form>
                 )}
               </div>
             )}
@@ -2984,85 +2919,86 @@ export default function App() {
 
       {/* ------------------------------------------------------------- */}
       {/* ------------------------------------------------------------- */}
-      {/* MODAL: CUSTOMER SIGN-IN POPUP (Dual Auth: SMS OTP + Password) */}
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL: CUSTOMER PATRON PORTAL (Sign In & Account Registration) */}
       {/* ------------------------------------------------------------- */}
       {showCustomerLoginModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(53, 11, 21, 0.75)', backdropFilter: 'blur(4px)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-          <div style={{ background: '#FFFFFF', borderRadius: '24px', padding: '30px 26px', maxWidth: '420px', width: '100%', border: '2px solid #B45309', boxShadow: '0 12px 40px rgba(0,0,0,0.35)', position: 'relative' }}>
+          <div style={{ background: '#FFFFFF', borderRadius: '24px', padding: '28px 24px', maxWidth: '420px', width: '100%', maxHeight: '90vh', overflowY: 'auto', border: '2px solid #B45309', boxShadow: '0 12px 40px rgba(0,0,0,0.35)', position: 'relative' }}>
             
             <button
-              onClick={() => { setShowCustomerLoginModal(false); setOtpStep('PHONE'); }}
+              onClick={() => setShowCustomerLoginModal(false)}
               style={{ position: 'absolute', top: '16px', right: '16px', background: 'transparent', border: 'none', fontSize: '1.2rem', color: '#94A3B8', cursor: 'pointer' }}
             >
               ✕
             </button>
 
-            <div style={{ width: '52px', height: '52px', borderRadius: '50%', background: '#FFFFFF', border: '2px solid #B45309', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px', boxShadow: '0 4px 12px rgba(180, 83, 9, 0.2)' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#FFFFFF', border: '2px solid #B45309', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 8px', boxShadow: '0 4px 12px rgba(180, 83, 9, 0.2)' }}>
               <img src="images/TheLadduStory_Logo.jpg" alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; e.target.parentNode.innerText = '👑'; }} />
             </div>
 
-            <h3 className="royal-title" style={{ margin: '0 0 4px', fontSize: '1.45rem', color: '#4A121E', fontWeight: '700', textAlign: 'center' }}>
-              Patron Sign-In
+            <h3 className="royal-title" style={{ margin: '0 0 4px', fontSize: '1.35rem', color: '#4A121E', fontWeight: '700', textAlign: 'center' }}>
+              Patron Portal
             </h3>
             <p style={{ margin: '0 0 16px', fontSize: '0.8rem', color: '#64748B', textAlign: 'center' }}>
-              Choose fast phone verification or password access.
+              Sign in to track orders or create your account in 10 seconds.
             </p>
 
-            {/* DUAL AUTH TABS */}
-            <div style={{ display: 'flex', background: '#F1F5F9', padding: '3px', borderRadius: '10px', marginBottom: '18px', border: '1px solid rgba(180, 83, 9, 0.15)' }}>
+            {/* TABS */}
+            <div style={{ display: 'flex', background: '#F1F5F9', padding: '3px', borderRadius: '10px', marginBottom: '16px', border: '1px solid rgba(180, 83, 9, 0.15)' }}>
               <button
                 type="button"
-                onClick={() => { setAuthMode('OTP'); setOtpStep('PHONE'); }}
+                onClick={() => setAuthMode('SIGNIN')}
                 style={{
                   flex: 1,
                   padding: '9px',
                   borderRadius: '7px',
                   border: 'none',
                   fontWeight: '800',
-                  fontSize: '0.82rem',
+                  fontSize: '0.85rem',
                   cursor: 'pointer',
-                  background: authMode === 'OTP' ? 'linear-gradient(135deg, #4A121E 0%, #831843 100%)' : 'transparent',
-                  color: authMode === 'OTP' ? '#FFFBEB' : '#64748B',
-                  boxShadow: authMode === 'OTP' ? '0 2px 6px rgba(74, 18, 30, 0.2)' : 'none',
+                  background: authMode === 'SIGNIN' ? 'linear-gradient(135deg, #4A121E 0%, #831843 100%)' : 'transparent',
+                  color: authMode === 'SIGNIN' ? '#FFFBEB' : '#64748B',
+                  boxShadow: authMode === 'SIGNIN' ? '0 2px 6px rgba(74, 18, 30, 0.2)' : 'none',
                   transition: 'all 0.2s ease'
                 }}
               >
-                📲 SMS OTP
+                🔑 Sign In
               </button>
               <button
                 type="button"
-                onClick={() => setAuthMode('PASSWORD')}
+                onClick={() => setAuthMode('REGISTER')}
                 style={{
                   flex: 1,
                   padding: '9px',
                   borderRadius: '7px',
                   border: 'none',
                   fontWeight: '800',
-                  fontSize: '0.82rem',
+                  fontSize: '0.85rem',
                   cursor: 'pointer',
-                  background: authMode === 'PASSWORD' ? 'linear-gradient(135deg, #4A121E 0%, #831843 100%)' : 'transparent',
-                  color: authMode === 'PASSWORD' ? '#FFFBEB' : '#64748B',
-                  boxShadow: authMode === 'PASSWORD' ? '0 2px 6px rgba(74, 18, 30, 0.2)' : 'none',
+                  background: authMode === 'REGISTER' ? 'linear-gradient(135deg, #4A121E 0%, #831843 100%)' : 'transparent',
+                  color: authMode === 'REGISTER' ? '#FFFBEB' : '#64748B',
+                  boxShadow: authMode === 'REGISTER' ? '0 2px 6px rgba(74, 18, 30, 0.2)' : 'none',
                   transition: 'all 0.2s ease'
                 }}
               >
-                🔑 User ID & Password
+                ✨ Create Account
               </button>
             </div>
 
-            {authMode === 'PASSWORD' ? (
-              /* PASSWORD LOGIN FORM */
+            {authMode === 'SIGNIN' ? (
+              /* MODAL: SIGN IN FORM */
               <form onSubmit={handlePasswordLogin}>
                 <div style={{ marginBottom: '14px' }}>
                   <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px', letterSpacing: '0.5px' }}>
-                    10-DIGIT MOBILE NUMBER / USER ID *
+                    10-DIGIT MOBILE NUMBER *
                   </label>
                   <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid rgba(180, 83, 9, 0.3)', borderRadius: '8px', overflow: 'hidden', background: '#FAF6F0' }}>
                     <span style={{ padding: '10px 12px', background: 'rgba(180, 83, 9, 0.1)', color: '#4A121E', fontWeight: '800', fontSize: '0.88rem' }}>
                       +91
                     </span>
                     <input
-                      id="modal-customer-phone-pwd"
+                      id="modal-signin-phone"
                       type="tel"
                       placeholder="e.g. 9686412342"
                       value={loginPhoneInput}
@@ -3074,22 +3010,13 @@ export default function App() {
                 </div>
 
                 <div style={{ marginBottom: '18px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                    <label style={{ fontSize: '0.74rem', fontWeight: '800', color: '#4A121E', letterSpacing: '0.5px' }}>
-                      PASSWORD / PIN *
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => { setAuthMode('OTP'); setOtpStep('PHONE'); }}
-                      style={{ background: 'transparent', border: 'none', color: '#B45309', fontSize: '0.74rem', fontWeight: '800', cursor: 'pointer', padding: 0 }}
-                    >
-                      Forgot? Use OTP →
-                    </button>
-                  </div>
+                  <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px', letterSpacing: '0.5px' }}>
+                    PASSWORD / PIN *
+                  </label>
                   <input
-                    id="modal-customer-password-input"
+                    id="modal-signin-pwd"
                     type="password"
-                    placeholder="Enter security password or PIN"
+                    placeholder="Enter your security password or PIN"
                     value={loginPasswordInput}
                     onChange={e => setLoginPasswordInput(e.target.value)}
                     required
@@ -3099,7 +3026,7 @@ export default function App() {
 
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <button
-                    id="modal-customer-pwd-submit-btn"
+                    id="modal-signin-submit-btn"
                     type="submit"
                     disabled={isCustomerLoggingIn}
                     style={{ flex: 1, background: 'linear-gradient(135deg, #4A121E 0%, #831843 100%)', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '800', fontSize: '0.95rem', cursor: isCustomerLoggingIn ? 'not-allowed' : 'pointer', boxShadow: '0 4px 12px rgba(74, 18, 30, 0.25)' }}
@@ -3109,139 +3036,136 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setShowCustomerLoginModal(false)}
-                    style={{ background: '#FAF6F0', border: '1px solid #E2E8F0', padding: '12px 16px', borderRadius: '8px', fontWeight: '700', color: '#64748B', cursor: 'pointer' }}
+                    style={{ background: '#FAF6F0', border: '1px solid #E2E8F0', padding: '12px 14px', borderRadius: '8px', fontWeight: '700', color: '#64748B', cursor: 'pointer' }}
                   >
                     Cancel
                   </button>
                 </div>
+
+                <div style={{ marginTop: '14px', textAlign: 'center', fontSize: '0.8rem', color: '#64748B' }}>
+                  First time here?{' '}
+                  <button
+                    type="button"
+                    onClick={() => { setRegPhone(loginPhoneInput); setAuthMode('REGISTER'); }}
+                    style={{ background: 'transparent', border: 'none', color: '#B45309', fontWeight: '800', cursor: 'pointer', padding: 0 }}
+                  >
+                    Create account →
+                  </button>
+                </div>
               </form>
             ) : (
-              /* SMS OTP FORM */
-              otpStep === 'PHONE' ? (
-                <form onSubmit={handleSendSmsOtp}>
-                  <div style={{ marginBottom: '14px' }}>
-                    <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px', letterSpacing: '0.5px' }}>
-                      10-DIGIT MOBILE NUMBER *
-                    </label>
-                    <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid rgba(180, 83, 9, 0.3)', borderRadius: '8px', overflow: 'hidden', background: '#FAF6F0' }}>
-                      <span style={{ padding: '10px 12px', background: 'rgba(180, 83, 9, 0.1)', color: '#4A121E', fontWeight: '800', fontSize: '0.88rem' }}>
-                        +91
-                      </span>
-                      <input
-                        id="modal-customer-phone-input"
-                        type="tel"
-                        placeholder="e.g. 9686412341"
-                        value={loginPhoneInput}
-                        onChange={e => setLoginPhoneInput(e.target.value)}
-                        required
-                        style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: 'none', background: 'transparent', fontSize: '0.95rem', fontWeight: '700', color: '#4A121E', outline: 'none' }}
-                      />
-                    </div>
-                  </div>
+              /* MODAL: REGISTRATION FORM */
+              <form onSubmit={handleRegisterCustomer}>
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '800', color: '#4A121E', marginBottom: '3px' }}>
+                    PATRON NAME *
+                  </label>
+                  <input
+                    id="modal-reg-name"
+                    type="text"
+                    placeholder="Full name"
+                    value={regName}
+                    onChange={e => setRegName(e.target.value)}
+                    required
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 11px', borderRadius: '8px', border: '1.5px solid rgba(180, 83, 9, 0.3)', background: '#FAF6F0', fontSize: '0.9rem', color: '#4A121E' }}
+                  />
+                </div>
 
-                  <div style={{ marginBottom: '18px' }}>
-                    <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px', letterSpacing: '0.5px' }}>
-                      PATRON NAME (OPTIONAL)
-                    </label>
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '800', color: '#4A121E', marginBottom: '3px' }}>
+                    10-DIGIT MOBILE NUMBER *
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', border: '1.5px solid rgba(180, 83, 9, 0.3)', borderRadius: '8px', overflow: 'hidden', background: '#FAF6F0' }}>
+                    <span style={{ padding: '9px 11px', background: 'rgba(180, 83, 9, 0.1)', color: '#4A121E', fontWeight: '800', fontSize: '0.85rem' }}>
+                      +91
+                    </span>
                     <input
-                      id="modal-customer-name-input"
-                      type="text"
-                      placeholder="Auto-recognized if returning"
-                      value={loginNameInput}
-                      onChange={e => setLoginNameInput(e.target.value)}
-                      style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid rgba(180, 83, 9, 0.3)', background: '#FAF6F0', fontSize: '0.9rem', color: '#4A121E' }}
+                      id="modal-reg-phone"
+                      type="tel"
+                      placeholder="e.g. 9686412342"
+                      value={regPhone}
+                      onChange={e => setRegPhone(e.target.value)}
+                      required
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: 'none', background: 'transparent', fontSize: '0.92rem', fontWeight: '700', color: '#4A121E', outline: 'none' }}
                     />
                   </div>
+                </div>
 
-                  <div style={{ display: 'flex', gap: '10px' }}>
-                    <button
-                      id="modal-customer-submit-btn"
-                      type="submit"
-                      disabled={isCustomerLoggingIn}
-                      style={{ flex: 1, background: 'linear-gradient(135deg, #15803D 0%, #16A34A 100%)', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '800', fontSize: '0.95rem', cursor: isCustomerLoggingIn ? 'not-allowed' : 'pointer', boxShadow: '0 4px 12px rgba(22, 163, 74, 0.25)' }}
-                    >
-                      {isCustomerLoggingIn ? 'Sending SMS...' : '📲 Send SMS OTP'}
-                    </button>
-                    <button
-                      id="modal-customer-cancel-btn"
-                      type="button"
-                      onClick={() => setShowCustomerLoginModal(false)}
-                      style={{ background: '#FAF6F0', border: '1px solid #E2E8F0', padding: '12px 16px', borderRadius: '8px', fontWeight: '700', color: '#64748B', cursor: 'pointer' }}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                /* STEP 2: VERIFY OTP */
-                <form onSubmit={handleVerifySmsOtp}>
-                  <div style={{ background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: '12px', padding: '12px', marginBottom: '14px', textAlign: 'center' }}>
-                    <div style={{ fontSize: '0.72rem', color: '#92400E', fontWeight: '800', textTransform: 'uppercase' }}>
-                      🔒 Security Verification
-                    </div>
-                    <div style={{ fontSize: '0.8rem', color: '#4A121E', fontWeight: '700', margin: '4px 0' }}>
-                      Code dispatched via SMS to:
-                    </div>
-                    <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#B45309', letterSpacing: '1px' }}>
-                      🇮🇳 +91 {loginPhoneInput.replace(/\D/g, '').slice(-10)}
-                    </div>
-                  </div>
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '800', color: '#4A121E', marginBottom: '3px' }}>
+                    DELIVERY ADDRESS *
+                  </label>
+                  <textarea
+                    id="modal-reg-addr"
+                    rows="2"
+                    placeholder="Apartment, Street, Area & City"
+                    value={regAddress}
+                    onChange={e => setRegAddress(e.target.value)}
+                    required
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: '8px', border: '1.5px solid rgba(180, 83, 9, 0.3)', background: '#FAF6F0', fontSize: '0.85rem', color: '#4A121E' }}
+                  />
+                </div>
 
-                  <div style={{ marginBottom: '16px' }}>
-                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#4A121E', marginBottom: '6px', textAlign: 'center' }}>
-                      ENTER CODE RECEIVED ON MOBILE
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '16px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#4A121E', marginBottom: '3px' }}>
+                      PASSWORD / PIN *
                     </label>
                     <input
-                      id="modal-customer-otp-input"
-                      type="text"
-                      maxLength="6"
-                      placeholder="• • • • • •"
-                      value={enteredOtp}
-                      onChange={e => setEnteredOtp(e.target.value.replace(/\D/g, ''))}
-                      autoFocus
-                      style={{ width: '100%', boxSizing: 'border-box', padding: '12px', borderRadius: '8px', border: '2px solid #B45309', fontSize: '1.5rem', fontWeight: '800', textAlign: 'center', letterSpacing: '8px', background: '#FAF6F0', color: '#4A121E', outline: 'none' }}
+                      id="modal-reg-pwd"
+                      type="password"
+                      placeholder="Min 4 digits"
+                      value={regPassword}
+                      onChange={e => setRegPassword(e.target.value)}
+                      required
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '9px 10px', borderRadius: '8px', border: '1.5px solid rgba(180, 83, 9, 0.3)', background: '#FAF6F0', fontSize: '0.85rem', color: '#4A121E' }}
                     />
                   </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#4A121E', marginBottom: '3px' }}>
+                      CONFIRM *
+                    </label>
+                    <input
+                      id="modal-reg-conf-pwd"
+                      type="password"
+                      placeholder="Re-enter"
+                      value={regConfirmPassword}
+                      onChange={e => setRegConfirmPassword(e.target.value)}
+                      required
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '9px 10px', borderRadius: '8px', border: '1.5px solid rgba(180, 83, 9, 0.3)', background: '#FAF6F0', fontSize: '0.85rem', color: '#4A121E' }}
+                    />
+                  </div>
+                </div>
 
+                <div style={{ display: 'flex', gap: '10px' }}>
                   <button
-                    id="modal-customer-verify-btn"
+                    id="modal-reg-submit-btn"
                     type="submit"
-                    disabled={enteredOtp.length < 4 || isCustomerLoggingIn}
-                    style={{
-                      width: '100%',
-                      background: (enteredOtp.length < 4 || isCustomerLoggingIn) ? '#94A3B8' : 'linear-gradient(135deg, #4A121E 0%, #831843 100%)',
-                      color: '#fff',
-                      border: 'none',
-                      padding: '12px',
-                      borderRadius: '8px',
-                      fontWeight: '800',
-                      fontSize: '0.95rem',
-                      cursor: (enteredOtp.length < 4 || isCustomerLoggingIn) ? 'not-allowed' : 'pointer',
-                      boxShadow: '0 4px 12px rgba(74, 18, 30, 0.25)'
-                    }}
+                    disabled={isCustomerLoggingIn}
+                    style={{ flex: 1, background: 'linear-gradient(135deg, #15803D 0%, #16A34A 100%)', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '800', fontSize: '0.92rem', cursor: isCustomerLoggingIn ? 'not-allowed' : 'pointer', boxShadow: '0 4px 12px rgba(22, 163, 74, 0.25)' }}
                   >
-                    {isCustomerLoggingIn ? 'Verifying...' : '✓ Verify Code & Sign In'}
+                    {isCustomerLoggingIn ? 'Creating...' : '👑 Create Account'}
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomerLoginModal(false)}
+                    style={{ background: '#FAF6F0', border: '1px solid #E2E8F0', padding: '12px 14px', borderRadius: '8px', fontWeight: '700', color: '#64748B', cursor: 'pointer' }}
+                  >
+                    Cancel
+                  </button>
+                </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '14px', fontSize: '0.78rem' }}>
-                    <button
-                      type="button"
-                      onClick={() => { setOtpStep('PHONE'); setEnteredOtp(''); }}
-                      style={{ background: 'transparent', border: 'none', color: '#831843', fontWeight: '700', cursor: 'pointer', padding: 0 }}
-                    >
-                      ← Change Phone
-                    </button>
-                    <button
-                      type="button"
-                      disabled={otpCountdown > 0}
-                      onClick={handleSendSmsOtp}
-                      style={{ background: 'transparent', border: 'none', color: otpCountdown > 0 ? '#94A3B8' : '#B45309', fontWeight: '700', cursor: otpCountdown > 0 ? 'default' : 'pointer', padding: 0 }}
-                    >
-                      {otpCountdown > 0 ? `Resend in ${otpCountdown}s` : 'Resend SMS'}
-                    </button>
-                  </div>
-                </form>
-              )
+                <div style={{ marginTop: '12px', textAlign: 'center', fontSize: '0.78rem', color: '#64748B' }}>
+                  Already registered?{' '}
+                  <button
+                    type="button"
+                    onClick={() => { setLoginPhoneInput(regPhone); setAuthMode('SIGNIN'); }}
+                    style={{ background: 'transparent', border: 'none', color: '#B45309', fontWeight: '800', cursor: 'pointer', padding: 0 }}
+                  >
+                    Sign in →
+                  </button>
+                </div>
+              </form>
             )}
           </div>
         </div>
@@ -3490,6 +3414,59 @@ export default function App() {
       )}
 
       {/* ------------------------------------------------------------- */}
+      {/* MODAL: EDIT DELIVERY ADDRESS                                  */}
+      {/* ------------------------------------------------------------- */}
+      {showAddressModal && customerUser && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(53, 11, 21, 0.75)', backdropFilter: 'blur(4px)', zIndex: 1250, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ background: '#FFFFFF', borderRadius: '22px', padding: '26px 22px', maxWidth: '400px', width: '100%', border: '2px solid #B45309', boxShadow: '0 12px 40px rgba(0,0,0,0.35)', position: 'relative' }}>
+            <button
+              onClick={() => setShowAddressModal(false)}
+              style={{ position: 'absolute', top: '16px', right: '16px', background: 'transparent', border: 'none', fontSize: '1.2rem', color: '#94A3B8', cursor: 'pointer' }}
+            >
+              ✕
+            </button>
+
+            <h3 className="royal-title" style={{ margin: '0 0 6px', fontSize: '1.35rem', color: '#4A121E', fontWeight: '700', textAlign: 'center' }}>
+              📍 Edit Delivery Address
+            </h3>
+            <p style={{ margin: '0 0 16px', fontSize: '0.8rem', color: '#64748B', textAlign: 'center' }}>
+              Update your primary doorstep delivery destination.
+            </p>
+
+            <form onSubmit={handleSaveDeliveryAddress}>
+              <div style={{ marginBottom: '18px' }}>
+                <textarea
+                  rows="3"
+                  required
+                  placeholder="Apartment, Street, Landmark, City & Pincode"
+                  value={editAddressInput}
+                  onChange={e => setEditAddressInput(e.target.value)}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '12px', borderRadius: '8px', border: '1.5px solid rgba(180, 83, 9, 0.3)', background: '#FAF6F0', fontSize: '0.9rem', color: '#4A121E', resize: 'vertical' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  type="submit"
+                  disabled={isSavingAddress}
+                  style={{ flex: 1, background: 'linear-gradient(135deg, #4A121E 0%, #831843 100%)', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', fontWeight: '800', fontSize: '0.92rem', cursor: isSavingAddress ? 'not-allowed' : 'pointer' }}
+                >
+                  {isSavingAddress ? 'Saving...' : 'Save Address'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAddressModal(false)}
+                  style={{ background: '#FAF6F0', border: '1px solid #E2E8F0', padding: '12px 14px', borderRadius: '8px', fontWeight: '700', color: '#64748B', cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
       {/* MODAL: SET OR UPDATE CUSTOMER PASSWORD / PIN                  */}
       {/* ------------------------------------------------------------- */}
       {showSetPasswordModal && customerUser && (
@@ -3560,7 +3537,7 @@ export default function App() {
       )}
 
       {/* Invisible Google reCAPTCHA Container for Firebase Phone Auth */}
-      <div id="recaptcha-container"></div>
+      
 
     </div>
   );

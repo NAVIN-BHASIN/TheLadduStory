@@ -524,5 +524,76 @@ export const setCustomerPasswordInSupabase = async (phone, newPassword) => {
   }
 };
 
+/**
+ * Register a new Patron with Name, Phone, Delivery Address and Password in Supabase
+ */
+export const registerCustomerInSupabase = async ({ phone, name, address, password }) => {
+  const cleanPhone = (phone || '').replace(/\D/g, '').slice(-10);
+  const passHash = await hashPassword(password);
+
+  // Store locally as guaranteed fallback
+  try {
+    localStorage.setItem('tls_cust_pwd_' + cleanPhone, passHash);
+    const profile = { phone: cleanPhone, name: name.trim(), address: address ? address.trim() : '' };
+    localStorage.setItem('tls_cust_profile_' + cleanPhone, JSON.stringify(profile));
+  } catch(e) {}
+
+  if (!supabaseInstance) {
+    return { success: true, customer: { phone: cleanPhone, name: name.trim(), address: address ? address.trim() : '' } };
+  }
+
+  try {
+    const { data, error } = await supabaseInstance
+      .from('customers')
+      .upsert({
+        phone: cleanPhone,
+        name: name.trim() || 'Valued Patron',
+        address: address ? address.trim() : '',
+        password_hash: passHash
+      }, { onConflict: 'phone' })
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.warn('[Supabase] Register fallback note (trying without password_hash if column missing):', error.message);
+      // Fallback if password_hash column not yet in remote schema cache
+      const { data: d2 } = await supabaseInstance
+        .from('customers')
+        .upsert({
+          phone: cleanPhone,
+          name: name.trim() || 'Valued Patron',
+          address: address ? address.trim() : ''
+        }, { onConflict: 'phone' })
+        .select()
+        .maybeSingle();
+
+      return { success: true, customer: d2 || { phone: cleanPhone, name: name.trim(), address: address ? address.trim() : '' } };
+    }
+
+    return { success: true, customer: data || { phone: cleanPhone, name: name.trim(), address: address ? address.trim() : '' } };
+  } catch (err) {
+    console.warn('[Supabase] registerCustomer fallback:', err);
+    return { success: true, customer: { phone: cleanPhone, name: name.trim(), address: address ? address.trim() : '' } };
+  }
+};
+
+/**
+ * Update Customer Name and Delivery Address in Supabase
+ */
+export const updateCustomerDetailsInSupabase = async (phone, { name, address }) => {
+  const cleanPhone = (phone || '').replace(/\D/g, '').slice(-10);
+  if (!supabaseInstance) return { success: true };
+  try {
+    await supabaseInstance
+      .from('customers')
+      .update({ name: name ? name.trim() : '', address: address ? address.trim() : '' })
+      .eq('phone', cleanPhone);
+    return { success: true };
+  } catch(e) {
+    return { success: false, error: e.message };
+  }
+};
+
+
 
 
