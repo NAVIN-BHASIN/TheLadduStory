@@ -8,6 +8,7 @@ import {
   fetchOrdersFromSupabase,
   insertOrderToSupabase,
   updateOrderStatusInSupabase,
+  updateOrderPaymentStatusInSupabase,
   fetchProductsFromSupabase,
   updateProductInSupabase,
   upsertProductInSupabase,
@@ -40,7 +41,10 @@ const APPS_SCRIPT_EXEC_URL = 'https://script.google.com/macros/s/AKfycbxIJKZkGtj
 const INITIAL_PRODUCTS = [
   { 
     id: '01', 
-    sku: 'RAGI-WALNUT', 
+    sku: 'RAGI-WALNUT',
+    p250: 300,
+    opt0: '250g (₹300)',
+    w0: '250g', 
     name: 'Ragi Walnut Laddu', 
     category: 'LADDU', 
     ratePerKg: 1200, 
@@ -61,7 +65,10 @@ const INITIAL_PRODUCTS = [
   },
   { 
     id: '02', 
-    sku: 'TILL-BLACK-SESAME', 
+    sku: 'TILL-BLACK-SESAME',
+    p250: 250,
+    opt0: '250g (₹250)',
+    w0: '250g', 
     name: 'Till Laddu (Black Sesame)', 
     category: 'LADDU', 
     ratePerKg: 1000, 
@@ -82,7 +89,10 @@ const INITIAL_PRODUCTS = [
   },
   { 
     id: '03', 
-    sku: 'SATTU-ALMOND', 
+    sku: 'SATTU-ALMOND',
+    p250: 275,
+    opt0: '250g (₹275)',
+    w0: '250g', 
     name: 'Sattu Almond Laddu', 
     category: 'LADDU', 
     ratePerKg: 1100, 
@@ -103,7 +113,10 @@ const INITIAL_PRODUCTS = [
   },
   { 
     id: '04', 
-    sku: 'GROUNDNUT', 
+    sku: 'GROUNDNUT',
+    p250: 200,
+    opt0: '250g (₹200)',
+    w0: '250g', 
     name: 'Groundnut Laddu', 
     category: 'LADDU', 
     ratePerKg: 800, 
@@ -124,7 +137,10 @@ const INITIAL_PRODUCTS = [
   },
   { 
     id: '05', 
-    sku: 'QUINOA-MOONG-DAL', 
+    sku: 'QUINOA-MOONG-DAL',
+    p250: 312,
+    opt0: '250g (₹312)',
+    w0: '250g', 
     name: 'Quinoa Moong Dal Laddu', 
     category: 'LADDU', 
     ratePerKg: 1250, 
@@ -145,7 +161,10 @@ const INITIAL_PRODUCTS = [
   },
   { 
     id: '06', 
-    sku: 'METHI-FENUGREEK', 
+    sku: 'METHI-FENUGREEK',
+    p250: 312,
+    opt0: '250g (₹312)',
+    w0: '250g', 
     name: 'Methi (fenugreek) Laddu', 
     category: 'LADDU', 
     ratePerKg: 1250, 
@@ -166,7 +185,10 @@ const INITIAL_PRODUCTS = [
   },
   { 
     id: '07', 
-    sku: 'DATES-DRY-FRUITS', 
+    sku: 'DATES-DRY-FRUITS',
+    p250: 475,
+    opt0: '250g (₹475)',
+    w0: '250g', 
     name: 'Dates & Dry Fruits Bites', 
     category: 'LADDU', 
     ratePerKg: 1900, 
@@ -187,7 +209,10 @@ const INITIAL_PRODUCTS = [
   },
   { 
     id: '08', 
-    sku: 'POST-DELIVERY-PANJEERI', 
+    sku: 'POST-DELIVERY-PANJEERI',
+    p250: 450,
+    opt0: '250g (₹450)',
+    w0: '250g', 
     name: 'Post Delivery Panjeeri / Laddu', 
     category: 'LADDU', 
     ratePerKg: 1800, 
@@ -208,7 +233,10 @@ const INITIAL_PRODUCTS = [
   },
   { 
     id: '09', 
-    sku: 'JAWAR-PANJEERI', 
+    sku: 'JAWAR-PANJEERI',
+    p250: 475,
+    opt0: '250g (₹475)',
+    w0: '250g', 
     name: 'Jawar Panjeeri / Laddu', 
     category: 'LADDU', 
     ratePerKg: 1900, 
@@ -277,7 +305,7 @@ const INITIAL_PRODUCTS = [
 const MASTER_OMS_ORDERS = [];
 
 // IMMEDIATE SYNCHRONOUS PURGE OF LEGACY CACHE (Executes before React mounts)
-const CURRENT_CACHE_VERSION = 'v7_clean_supabase_truth';
+const CURRENT_CACHE_VERSION = 'v8_moq_and_payment_live';
 try {
   if (typeof window !== 'undefined' && window.localStorage) {
     if (window.localStorage.getItem('tls_cache_version') !== CURRENT_CACHE_VERSION) {
@@ -288,6 +316,53 @@ try {
     }
   }
 } catch (e) {}
+
+
+// DYNAMIC WEIGHT & MOQ RESOLUTION HELPER
+export const getProductWeightOptions = (product) => {
+  if (!product) return [];
+  if (product.category === 'SAVORY' || product.isMunchy) {
+    return [
+      { key: 'OPT1', label: product.opt1 || '100g', weight: product.w1 || '100g', price: Number(product.p500 || 0) },
+      { key: 'OPT2', label: product.opt2 || '200g', weight: product.w2 || '200g', price: Number(product.p1k || 0) }
+    ];
+  }
+
+  const rateKg = Number(product.ratePerKg || (Number(product.p500 || 0) * 2));
+  const p250 = product.p250 ? Number(product.p250) : Math.round(rateKg * 0.25);
+  const p500 = Number(product.p500 || Math.round(rateKg * 0.5));
+  const p1k = Number(product.p1k || rateKg);
+
+  const opt0 = product.opt0 || `250g (₹${p250})`;
+  const opt1 = product.opt1 || `500g (₹${p500})`;
+  const opt2 = product.opt2 || `1 Kg (₹${p1k.toLocaleString('en-IN')})`;
+
+  // When MOQ is 250g -> 3 options: 250g, 500g, 1 Kg
+  if (product.moq === '250g') {
+    return [
+      { key: 'OPT0', label: opt0, weight: '250g', price: p250 },
+      { key: 'OPT1', label: opt1, weight: '500g', price: p500 },
+      { key: 'OPT2', label: opt2, weight: '1 Kg', price: p1k }
+    ];
+  }
+
+  // When MOQ is 500g -> 2 options: 500g, 1 Kg
+  return [
+    { key: 'OPT1', label: opt1, weight: '500g', price: p500 },
+    { key: 'OPT2', label: opt2, weight: '1 Kg', price: p1k }
+  ];
+};
+
+// CLEAN PICKUP NOTE HELPER (Avoids duplicate 'Self-Pickup' prepends)
+export const cleanPickupNote = (note) => {
+  if (!note) return '';
+  return note
+    .replace(/Self-Pickup/gi, '')
+    .replace(/Store Self-Pickup:?/gi, '')
+    .replace(/The Laddu Story Kitchen, Bangalore/gi, '')
+    .replace(/[():]/g, '')
+    .trim();
+};
 
 export default function App() {
   // Navigation & View State
@@ -313,7 +388,16 @@ export default function App() {
   const [products, setProducts] = useState(() => {
     try {
       const saved = localStorage.getItem('tls_products_db');
-      return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map(p => {
+            const init = INITIAL_PRODUCTS.find(i => i.sku === p.sku);
+            return init ? { ...init, ...p, p250: p.p250 || init.p250, opt0: p.opt0 || init.opt0, w0: p.w0 || init.w0 } : p;
+          });
+        }
+      }
+      return INITIAL_PRODUCTS;
     } catch (e) {
       return INITIAL_PRODUCTS;
     }
@@ -346,7 +430,7 @@ export default function App() {
   // Customer Account Session (Verified against Supabase Primary DB)
   const [customerUser, setCustomerUser] = useState(() => {
     try {
-      const CURRENT_CACHE_VERSION = 'v5_clean_supabase_truth';
+      const CURRENT_CACHE_VERSION = 'v8_moq_and_payment_live';
       if (localStorage.getItem('tls_cache_version') !== CURRENT_CACHE_VERSION) {
         return null;
       }
@@ -392,8 +476,13 @@ export default function App() {
   const [selectedWeights, setSelectedWeights] = useState({});
   const [custName, setCustName] = useState(() => customerUser ? customerUser.name : (localStorage.getItem('tls_cust_name') || ''));
   const [custPhone, setCustPhone] = useState(() => customerUser ? customerUser.phone : (localStorage.getItem('tls_cust_phone') || ''));
-  const [custAddress, setCustAddress] = useState(() => customerUser ? customerUser.address : (localStorage.getItem('tls_cust_addr') || ''));
-  const [fulfillmentType, setFulfillmentType] = useState('DELIVERY'); // 'DELIVERY' | 'PICKUP'
+  const [custAddress, setCustAddress] = useState(() => customerUser ? cleanPickupNote(customerUser.address) : cleanPickupNote(localStorage.getItem('tls_cust_addr') || ''));
+  const [fulfillmentType, setFulfillmentType] = useState('PICKUP'); // Default to Store Self-Pickup
+  const [deliveryNotice, setDeliveryNotice] = useState('');
+  const [paymentTiming, setPaymentTiming] = useState('NOW'); // 'NOW' | 'LATER'
+  const [upiRefId, setUpiRefId] = useState('');
+  const [selectedOrderForPay, setSelectedOrderForPay] = useState(null); // Customer pay-now modal
+  const [paymentFilter, setPaymentFilter] = useState('ALL'); // 'ALL' | 'PAID' | 'PENDING'
   
   // URL check for Staff/Admin portal (?staff, ?admin, #staff, #admin)
   const isStaffUrl = typeof window !== 'undefined' && (
@@ -857,7 +946,15 @@ export default function App() {
   };
 
   // Cart actions
-  const getWeight = (sku) => selectedWeights[sku] || 'OPT1';
+  const getWeight = (sku, product) => {
+    const opts = getProductWeightOptions(product);
+    const current = selectedWeights[sku];
+    if (current && opts.some(o => o.key === current)) {
+      return current;
+    }
+    return opts.length > 0 ? opts[0].key : 'OPT1';
+  };
+
   const setWeight = (sku, val) => setSelectedWeights({ ...selectedWeights, [sku]: val });
 
   const addToCart = (product) => {
@@ -866,10 +963,13 @@ export default function App() {
       return;
     }
 
-    const choice = getWeight(product.sku);
-    const packLabel = choice === 'OPT1' ? product.opt1 : product.opt2;
-    const cleanWeight = choice === 'OPT1' ? product.w1 : product.w2;
-    const unitPrice = choice === 'OPT1' ? product.p500 : product.p1k;
+    const opts = getProductWeightOptions(product);
+    const choiceKey = getWeight(product.sku, product);
+    const chosenOpt = opts.find(o => o.key === choiceKey) || opts[0];
+
+    const packLabel = chosenOpt.label;
+    const cleanWeight = chosenOpt.weight;
+    const unitPrice = chosenOpt.price;
     const cartKey = `${product.sku}-${cleanWeight}`;
 
     const existing = cart.find(i => i.cartKey === cartKey);
@@ -888,9 +988,76 @@ export default function App() {
       }]);
     }
 
-    // Show brief toast notification on card without opening cart sheet
-    setAddedToast(`${product.name} added!`);
+    setAddedToast(`${product.name} (${cleanWeight}) added!`);
     setTimeout(() => setAddedToast(''), 1800);
+  };
+
+  // Staff / Admin MOQ Management
+  const updateProductMoq = (sku, newMoq) => {
+    const updated = products.map(p => p.sku === sku ? { ...p, moq: newMoq } : p);
+    setProducts(updated);
+    try {
+      localStorage.setItem('tls_products_db', JSON.stringify(updated));
+    } catch (e) {}
+    const target = updated.find(p => p.sku === sku);
+    if (target) {
+      upsertProductInSupabase(target);
+    }
+  };
+
+  const setAllLaddusMoq = (newMoq) => {
+    const updated = products.map(p => {
+      if (p.category === 'LADDU') {
+        return { ...p, moq: newMoq };
+      }
+      return p;
+    });
+    setProducts(updated);
+    try {
+      localStorage.setItem('tls_products_db', JSON.stringify(updated));
+    } catch (e) {}
+    updated.forEach(p => {
+      if (p.category === 'LADDU') upsertProductInSupabase(p);
+    });
+    alert(`All Laddus updated to ${newMoq} MOQ! Store now displays ${newMoq === '250g' ? '3 weight options (250g, 500g, 1 Kg)' : '2 weight options (500g, 1 Kg)'}.`);
+  };
+
+  // Staff / Admin Payment Receipt & Status Management
+  const handleStaffMarkPayment = async (orderId, method) => {
+    const methodLabel = method === 'CASH' ? 'Cash at Counter' : 'UPI Verified';
+    if (!window.confirm(`Confirm marking payment for ${orderId} as PAID via ${methodLabel}?`)) return;
+
+    const updated = orders.map(o => o.orderId === orderId ? {
+      ...o,
+      paymentStatus: 'PAID',
+      paymentMethod: method === 'CASH' ? 'CASH' : 'UPI_VERIFIED',
+      paymentReceivedAt: new Date().toLocaleTimeString()
+    } : o);
+
+    setOrders(updated);
+    try {
+      localStorage.setItem('tls_orders_db', JSON.stringify(updated));
+    } catch(e) {}
+
+    // Instant ACID write-back to Supabase
+    try {
+      await updateOrderPaymentStatusInSupabase(orderId, 'PAID', method === 'CASH' ? 'CASH' : 'UPI_VERIFIED');
+    } catch(e) {}
+
+    // Realtime broadcast to sync customer devices immediately
+    try {
+      await fetch(REALTIME_TOPIC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'PAYMENT_UPDATE',
+          orderId,
+          paymentStatus: 'PAID',
+          paymentMethod: method === 'CASH' ? 'CASH' : 'UPI_VERIFIED',
+          timestamp: new Date().toISOString()
+        })
+      });
+    } catch(e) {}
   };
 
   const updateCartQty = (cartKey, delta) => {
@@ -1009,10 +1176,12 @@ export default function App() {
     const orderId = `TLS-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.floor(1000 + Math.random() * 9000)}`;
     const cleanPhone = custPhone.replace(/\D/g, '').slice(-10);
 
+    const note = cleanPickupNote(custAddress);
     const resolvedAddress = fulfillmentType === 'PICKUP'
-      ? (custAddress.trim() ? `Self-Pickup (${custAddress.trim()})` : 'Store Self-Pickup: The Laddu Story Kitchen, Bangalore')
+      ? (note ? `Store Self-Pickup: The Laddu Story Kitchen, Bangalore (Note: ${note})` : 'Store Self-Pickup: The Laddu Story Kitchen, Bangalore')
       : custAddress.trim();
 
+    const isPayNow = paymentTiming === 'NOW';
     const newOrder = {
       orderId,
       time: new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' }) + ', ' + new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
@@ -1032,7 +1201,9 @@ export default function App() {
       })),
       total: cartTotal,
       status: 'RECEIVED',
-      paymentMethod: 'UPI'
+      paymentMethod: isPayNow ? 'UPI_ONLINE' : 'PAY_ON_PICKUP',
+      paymentStatus: isPayNow ? 'PAID' : 'PAY_ON_PICKUP',
+      upiRef: isPayNow ? (upiRefId.trim() || 'UPI-APP') : ''
     };
 
     const updatedOrders = [newOrder, ...orders];
@@ -1072,7 +1243,7 @@ export default function App() {
     syncWithCloud(updatedOrders, products);
 
     // Generate UPI QR
-    const upiUri = `upi://pay?pa=9343207515@okbizaxis&pn=The%20Laddu%20Story&am=${cartTotal}&cu=INR&tn=${encodeURIComponent(`Order ${orderId}`)}`;
+    const upiUri = `upi://pay?pa=neetikabhasin@okaxis&pn=The%20Laddu%20Story&am=${cartTotal}&cu=INR&tn=${encodeURIComponent(`Order ${orderId}`)}`;
     try {
       const qrUrl = await QRCode.toDataURL(upiUri, { width: 260, margin: 2 });
       setQrDataUrl(qrUrl);
@@ -1337,7 +1508,7 @@ export default function App() {
             ))}
           </div>
 
-          {/* Fulfillment Method Selection */}
+          {/* Fulfillment Method Selection (Default: Store Self-Pickup) */}
           <div style={{ marginBottom: '14px' }}>
             <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '800', color: '#4A121E', marginBottom: '6px' }}>
               SELECT DELIVERY / PICKUP METHOD:
@@ -1345,9 +1516,13 @@ export default function App() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
               <button
                 type="button"
-                onClick={() => setFulfillmentType('DELIVERY')}
+                id="select-doorstep-btn"
+                onClick={() => {
+                  setDeliveryNotice('⚠️ Door Step Delivery is not functional at this moment. Orders are exclusively available for Store Self-Pickup at our Bangalore Kitchen.');
+                  setFulfillmentType('PICKUP');
+                }}
                 style={{
-                  padding: '9px 8px',
+                  padding: '10px 8px',
                   borderRadius: '8px',
                   border: fulfillmentType === 'DELIVERY' ? '2px solid #4A121E' : '1px solid #CBD5E1',
                   background: fulfillmentType === 'DELIVERY' ? '#E0F2FE' : '#fff',
@@ -1361,21 +1536,52 @@ export default function App() {
               </button>
               <button
                 type="button"
-                onClick={() => setFulfillmentType('PICKUP')}
+                id="select-pickup-btn"
+                onClick={() => {
+                  setDeliveryNotice('');
+                  setFulfillmentType('PICKUP');
+                }}
                 style={{
-                  padding: '9px 8px',
+                  padding: '10px 8px',
                   borderRadius: '8px',
-                  border: fulfillmentType === 'PICKUP' ? '2px solid #4A121E' : '1px solid #CBD5E1',
-                  background: fulfillmentType === 'PICKUP' ? '#E0F2FE' : '#fff',
-                  color: fulfillmentType === 'PICKUP' ? '#4A121E' : '#64748B',
+                  border: fulfillmentType === 'PICKUP' ? '2px solid #059669' : '1px solid #CBD5E1',
+                  background: fulfillmentType === 'PICKUP' ? '#ECFDF5' : '#fff',
+                  color: fulfillmentType === 'PICKUP' ? '#065F46' : '#64748B',
                   fontWeight: '800',
                   fontSize: '0.82rem',
                   cursor: 'pointer'
                 }}
               >
-                🛍️ Store Self-Pickup
+                🛍️ Store Self-Pickup (Selected)
               </button>
             </div>
+
+            {deliveryNotice && (
+              <div style={{
+                marginTop: '10px',
+                background: '#FEF2F2',
+                border: '1.5px solid #FCA5A5',
+                color: '#991B1B',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                fontSize: '0.8rem',
+                fontWeight: '700',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '8px',
+                boxShadow: '0 2px 6px rgba(185, 28, 28, 0.08)'
+              }}>
+                <span>{deliveryNotice}</span>
+                <button
+                  type="button"
+                  onClick={() => setDeliveryNotice('')}
+                  style={{ background: 'transparent', border: 'none', color: '#991B1B', cursor: 'pointer', fontWeight: '800', fontSize: '0.9rem' }}
+                >
+                  ✕
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Customer Inputs */}
@@ -1421,6 +1627,124 @@ export default function App() {
             />
           </div>
 
+          {/* Payment Method Selector (Pay Now or Pay on Pickup) */}
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '800', color: '#4A121E', marginBottom: '6px' }}>
+              SELECT PAYMENT TIMING:
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
+              <button
+                type="button"
+                id="pay-now-toggle-btn"
+                onClick={() => setPaymentTiming('NOW')}
+                style={{
+                  padding: '10px 8px',
+                  borderRadius: '8px',
+                  border: paymentTiming === 'NOW' ? '2px solid #059669' : '1px solid #CBD5E1',
+                  background: paymentTiming === 'NOW' ? '#ECFDF5' : '#fff',
+                  color: paymentTiming === 'NOW' ? '#065F46' : '#64748B',
+                  fontWeight: '800',
+                  fontSize: '0.82rem',
+                  cursor: 'pointer'
+                }}
+              >
+                📱 Pay Now (UPI QR)
+              </button>
+              <button
+                type="button"
+                id="pay-later-toggle-btn"
+                onClick={() => setPaymentTiming('LATER')}
+                style={{
+                  padding: '10px 8px',
+                  borderRadius: '8px',
+                  border: paymentTiming === 'LATER' ? '2px solid #B45309' : '1px solid #CBD5E1',
+                  background: paymentTiming === 'LATER' ? '#FFFBEB' : '#fff',
+                  color: paymentTiming === 'LATER' ? '#92400E' : '#64748B',
+                  fontWeight: '800',
+                  fontSize: '0.82rem',
+                  cursor: 'pointer'
+                }}
+              >
+                💵 Pay on Pickup (Later)
+              </button>
+            </div>
+
+            {paymentTiming === 'NOW' ? (
+              <div style={{ background: '#F0FDF4', border: '1.5px solid #86EFAC', borderRadius: '12px', padding: '14px', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.85rem', fontWeight: '800', color: '#166534', marginBottom: '8px' }}>
+                  Scan & Pay via Google Pay / PhonePe / Paytm / BHIM
+                </div>
+                
+                <div style={{ display: 'inline-block', background: '#fff', padding: '10px', borderRadius: '14px', border: '1px solid #CBD5E1', boxShadow: '0 4px 12px rgba(0,0,0,0.06)' }}>
+                  <img
+                    src="upi_qr.png"
+                    alt="The Laddu Story Official UPI QR Code"
+                    style={{ width: '185px', height: '185px', display: 'block', objectFit: 'contain' }}
+                    onError={(e) => { e.target.src = 'images/TheLadduStory_Logo.jpg'; }}
+                  />
+                </div>
+
+                <div style={{ marginTop: '10px', fontSize: '0.84rem', fontWeight: '700', color: '#166534', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                  <span>UPI ID:</span>
+                  <span style={{ fontFamily: 'monospace', background: '#DCFCE7', padding: '3px 8px', borderRadius: '6px', border: '1px solid #86EFAC', fontSize: '0.86rem' }}>
+                    neetikabhasin@okaxis
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText('neetikabhasin@okaxis');
+                      alert('UPI ID copied to clipboard: neetikabhasin@okaxis');
+                    }}
+                    style={{ background: '#166534', color: '#fff', border: 'none', padding: '3px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: '800', cursor: 'pointer' }}
+                  >
+                    📋 Copy
+                  </button>
+                </div>
+
+                <div style={{ marginTop: '10px' }}>
+                  <a
+                    href={`upi://pay?pa=neetikabhasin@okaxis&pn=The%20Laddu%20Story&am=${cartTotal}&cu=INR&tn=TLS-Order`}
+                    style={{
+                      display: 'inline-block',
+                      background: '#059669',
+                      color: '#fff',
+                      textDecoration: 'none',
+                      padding: '9px 18px',
+                      borderRadius: '8px',
+                      fontSize: '0.85rem',
+                      fontWeight: '800',
+                      boxShadow: '0 2px 8px rgba(5, 150, 105, 0.35)'
+                    }}
+                  >
+                    ⚡ Tap to Pay ₹{cartTotal.toLocaleString('en-IN')} via UPI App
+                  </a>
+                </div>
+
+                <div style={{ marginTop: '10px' }}>
+                  <input
+                    type="text"
+                    placeholder="UPI Reference No / UTR (Optional)"
+                    value={upiRefId}
+                    onChange={e => setUpiRefId(e.target.value)}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '8px 12px', borderRadius: '6px', border: '1px solid #86EFAC', fontSize: '0.82rem', background: '#fff' }}
+                  />
+                  <div style={{ fontSize: '0.72rem', color: '#166534', marginTop: '4px' }}>
+                    ✓ Instant order placement. Payment status tracked in real-time.
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: '12px', padding: '14px', fontSize: '0.82rem', color: '#92400E' }}>
+                <div style={{ fontWeight: '800', fontSize: '0.88rem', marginBottom: '4px' }}>
+                  📍 Payment at Store Pickup (Bangalore Kitchen):
+                </div>
+                <div>
+                  You can pay ₹<b>{cartTotal.toLocaleString('en-IN')}</b> in <b>Cash</b> or via <b>UPI</b> when you collect your order at our kitchen. Our staff will receive cash or verify UPI and mark your order as Paid.
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Bill Summary */}
           <div style={{ borderTop: '2px solid #E2E8F0', paddingTop: '12px', marginBottom: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: '#64748B', marginBottom: '6px' }}>
@@ -1443,7 +1767,7 @@ export default function App() {
             disabled={isSubmitting}
             style={{
               width: '100%',
-              background: isSubmitting ? '#94A3B8' : '#831843',
+              background: isSubmitting ? '#94A3B8' : (paymentTiming === 'NOW' ? '#059669' : '#831843'),
               color: '#FFFFFF',
               border: 'none',
               padding: '14px',
@@ -1458,7 +1782,11 @@ export default function App() {
               gap: '8px'
             }}
           >
-            {isSubmitting ? '⏳ Saving Order...' : '🛍️ Place Order & Save in Google Sheets'}
+            {isSubmitting 
+              ? '⏳ Saving Order...' 
+              : (paymentTiming === 'NOW' 
+                  ? `📱 Place Order & Pay ₹${cartTotal.toLocaleString('en-IN')} via UPI` 
+                  : `🛍️ Place Order (Pay ₹${cartTotal.toLocaleString('en-IN')} on Pickup)`)}
           </button>
         </div>
       )}
@@ -1694,8 +2022,10 @@ export default function App() {
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
                 {products.map(product => {
-                  const currentWeight = getWeight(product.sku);
-                  const price = currentWeight === 'OPT1' ? product.p500 : product.p1k;
+                  const options = getProductWeightOptions(product);
+                  const currentKey = getWeight(product.sku, product);
+                  const currentOpt = options.find(o => o.key === currentKey) || options[0];
+                  const price = currentOpt ? currentOpt.price : product.p500;
                   const isOutOfStock = product.stockStatus === 'OUT_OF_STOCK';
                   
                   return (
@@ -1768,40 +2098,29 @@ export default function App() {
                           ★ {product.benefit}
                         </div>
 
-                        {/* Weight Selector */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '14px' }}>
-                          <button
-                            type="button"
-                            onClick={() => setWeight(product.sku, 'OPT1')}
-                            style={{
-                              padding: '8px 4px',
-                              borderRadius: '8px',
-                              border: currentWeight === 'OPT1' ? '2px solid #831843' : '1px solid #CBD5E1',
-                              background: currentWeight === 'OPT1' ? '#E0F2FE' : '#fff',
-                              color: currentWeight === 'OPT1' ? '#4A121E' : '#475569',
-                              fontWeight: '700',
-                              fontSize: '0.8rem',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            {product.opt1}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setWeight(product.sku, 'OPT2')}
-                            style={{
-                              padding: '8px 4px',
-                              borderRadius: '8px',
-                              border: currentWeight === 'OPT2' ? '2px solid #831843' : '1px solid #CBD5E1',
-                              background: currentWeight === 'OPT2' ? '#E0F2FE' : '#fff',
-                              color: currentWeight === 'OPT2' ? '#4A121E' : '#475569',
-                              fontWeight: '700',
-                              fontSize: '0.8rem',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            {product.opt2}
-                          </button>
+                        {/* Dynamic Weight Selector (250g, 500g, 1 Kg based on MOQ) */}
+                        <div style={{ display: 'grid', gridTemplateColumns: options.length === 3 ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)', gap: '6px', marginBottom: '14px' }}>
+                          {options.map(opt => (
+                            <button
+                              key={opt.key}
+                              type="button"
+                              onClick={() => setWeight(product.sku, opt.key)}
+                              style={{
+                                padding: '7px 3px',
+                                borderRadius: '8px',
+                                border: currentKey === opt.key ? '2px solid #831843' : '1px solid #CBD5E1',
+                                background: currentKey === opt.key ? '#E0F2FE' : '#fff',
+                                color: currentKey === opt.key ? '#4A121E' : '#475569',
+                                fontWeight: '800',
+                                fontSize: options.length === 3 ? '0.74rem' : '0.8rem',
+                                cursor: 'pointer',
+                                textAlign: 'center',
+                                lineHeight: 1.2
+                              }}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
                         </div>
 
                         {/* Price & Add to Cart */}
@@ -1981,9 +2300,21 @@ export default function App() {
                                   <b>₹{it.unitPrice * it.qty}</b>
                                 </div>
                               ))}
-                              <div style={{ borderTop: '1px solid #E2E8F0', marginTop: '8px', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', fontWeight: '800', color: '#4A121E' }}>
-                                <span>Total Paid (UPI):</span>
-                                <span>₹{o.total}</span>
+                              <div style={{ borderTop: '1px solid #E2E8F0', marginTop: '8px', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                                <div>
+                                  <span style={{ fontWeight: '800', color: '#4A121E', fontSize: '0.95rem' }}>Total: ₹{o.total}</span>
+                                  <span style={{ marginLeft: '10px', fontSize: '0.78rem', fontWeight: '800', padding: '3px 8px', borderRadius: '6px', background: o.paymentStatus === 'PAID' ? '#DEF7EC' : '#FEF3C7', color: o.paymentStatus === 'PAID' ? '#03543F' : '#92400E' }}>
+                                    {o.paymentStatus === 'PAID' ? `🟢 Paid via ${o.paymentMethod || 'UPI'}` : '⏳ Pay on Pickup (Cash / UPI)'}
+                                  </span>
+                                </div>
+                                {o.paymentStatus !== 'PAID' && (
+                                  <button
+                                    onClick={() => setSelectedOrderForPay(o)}
+                                    style={{ background: '#059669', color: '#fff', border: 'none', padding: '5px 12px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: '800', cursor: 'pointer' }}
+                                  >
+                                    📱 Pay ₹{o.total} Now via UPI
+                                  </button>
+                                )}
                               </div>
                             </div>
 
@@ -2404,7 +2735,33 @@ export default function App() {
                   />
                 </div>
 
-                {/* Status Quick Filter Chips */}
+                {/* Payment & Order Status Quick Filter Chips */}
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: '800', color: '#475569' }}>PAYMENT FILTER:</span>
+                  {[
+                    { id: 'ALL', label: 'All Payments', count: orders.length },
+                    { id: 'PAID', label: '🟢 Paid', count: orders.filter(o => o.paymentStatus === 'PAID').length },
+                    { id: 'PENDING', label: '🟠 Pending (Cash/Pickup)', count: orders.filter(o => o.paymentStatus !== 'PAID').length }
+                  ].map(pf => (
+                    <button
+                      key={pf.id}
+                      onClick={() => setPaymentFilter(pf.id)}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: '16px',
+                        border: paymentFilter === pf.id ? '2px solid #059669' : '1px solid #CBD5E1',
+                        background: paymentFilter === pf.id ? '#ECFDF5' : '#fff',
+                        color: paymentFilter === pf.id ? '#065F46' : '#475569',
+                        fontWeight: '800',
+                        fontSize: '0.75rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {pf.label} ({pf.count})
+                    </button>
+                  ))}
+                </div>
+
                 <div style={{ display: 'flex', gap: '8px', marginBottom: '18px', overflowX: 'auto', paddingBottom: '4px' }}>
                   {['ALL', 'RECEIVED', 'PREPARING', 'PACKED', 'READY FOR PICKUP', 'ORDER PICKED UP', 'OUT FOR DELIVERY', 'DELIVERED'].map(st => {
                     const count = st === 'ALL' ? orders.length : orders.filter(o => o.status === st).length;
@@ -2465,11 +2822,43 @@ export default function App() {
                               <b>₹{it.unitPrice * it.qty}</b>
                             </div>
                           ))}
-                          <div style={{ borderTop: '1px dashed #CBD5E1', marginTop: '6px', paddingTop: '6px', display: 'flex', justifyContent: 'space-between', fontWeight: '800', fontSize: '0.92rem', color: '#4A121E' }}>
-                            <span>Total Paid ({o.paymentMethod || 'UPI'}):</span>
-                            <span>₹{o.total}</span>
+                          <div style={{ borderTop: '1px dashed #CBD5E1', marginTop: '6px', paddingTop: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: '800', fontSize: '0.92rem', color: '#4A121E' }}>
+                            <span>Total: ₹{o.total}</span>
+                            <span style={{ 
+                              fontSize: '0.74rem', 
+                              padding: '3px 8px', 
+                              borderRadius: '6px', 
+                              background: o.paymentStatus === 'PAID' ? '#DEF7EC' : '#FEF3C7', 
+                              color: o.paymentStatus === 'PAID' ? '#03543F' : '#92400E' 
+                            }}>
+                              {o.paymentStatus === 'PAID' ? `🟢 PAID (${o.paymentMethod || 'UPI'})` : '🟠 PAY ON PICKUP'}
+                            </span>
                           </div>
                         </div>
+
+                        {o.paymentStatus !== 'PAID' && (
+                          <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', padding: '8px 10px', borderRadius: '8px', marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                            <span style={{ fontSize: '0.76rem', fontWeight: '800', color: '#92400E' }}>
+                              Staff Payment:
+                            </span>
+                            <div style={{ display: 'flex', gap: '4px' }}>
+                              <button
+                                onClick={() => handleStaffMarkPayment(o.orderId, 'CASH')}
+                                style={{ background: '#059669', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: '800', cursor: 'pointer' }}
+                                title="Customer paid cash at store"
+                              >
+                                💵 Cash Paid
+                              </button>
+                              <button
+                                onClick={() => handleStaffMarkPayment(o.orderId, 'UPI')}
+                                style={{ background: '#1E40AF', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: '800', cursor: 'pointer' }}
+                                title="Customer paid via UPI"
+                              >
+                                📱 UPI Paid
+                              </button>
+                            </div>
+                          </div>
+                        )}
 
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
                           <span style={{ fontSize: '0.75rem', fontWeight: '800', color: '#64748B' }}>STATUS:</span>
@@ -2524,6 +2913,32 @@ export default function App() {
                   </button>
                 </div>
 
+                {/* Quick Store-Wide Laddu MOQ Switch */}
+                <div style={{ background: '#FAF6F0', border: '1.5px solid #FDE68A', padding: '14px 16px', borderRadius: '12px', marginBottom: '18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                  <div>
+                    <div style={{ fontWeight: '800', color: '#4A121E', fontSize: '0.95rem' }}>⚡ Quick Store-Wide Laddu MOQ Controls</div>
+                    <div style={{ fontSize: '0.8rem', color: '#64748B' }}>
+                      Set MOQ for all Laddus across the customer store with 1 click:
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setAllLaddusMoq('250g')}
+                      style={{ background: '#059669', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '8px', fontWeight: '800', fontSize: '0.8rem', cursor: 'pointer' }}
+                    >
+                      ✓ Set All Laddus to 250g (Show 3 Weight Options)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAllLaddusMoq('500g')}
+                      style={{ background: '#831843', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '8px', fontWeight: '800', fontSize: '0.8rem', cursor: 'pointer' }}
+                    >
+                      ✓ Set All Laddus to 500g (Show 2 Weight Options)
+                    </button>
+                  </div>
+                </div>
+
                 {/* Product Inventory Cards Grid */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '18px' }}>
                   {products.map(p => (
@@ -2555,9 +2970,48 @@ export default function App() {
                       </div>
 
                       <div style={{ background: '#FAF6F0', padding: '10px 12px', borderRadius: '10px', fontSize: '0.8rem', marginBottom: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ color: '#64748B' }}>Min Order Qty (MOQ):</span>
-                          <b>{p.moq || '500g'}</b>
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            {p.category === 'LADDU' ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => updateProductMoq(p.sku, '250g')}
+                                  style={{
+                                    background: p.moq === '250g' ? '#059669' : '#F1F5F9',
+                                    color: p.moq === '250g' ? '#fff' : '#475569',
+                                    border: '1px solid #CBD5E1',
+                                    padding: '2px 8px',
+                                    borderRadius: '6px',
+                                    fontSize: '0.72rem',
+                                    fontWeight: '800',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  250g (3 opts)
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => updateProductMoq(p.sku, '500g')}
+                                  style={{
+                                    background: p.moq !== '250g' ? '#831843' : '#F1F5F9',
+                                    color: p.moq !== '250g' ? '#fff' : '#475569',
+                                    border: '1px solid #CBD5E1',
+                                    padding: '2px 8px',
+                                    borderRadius: '6px',
+                                    fontSize: '0.72rem',
+                                    fontWeight: '800',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  500g (2 opts)
+                                </button>
+                              </>
+                            ) : (
+                              <b>{p.moq || '100g'}</b>
+                            )}
+                          </div>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                           <span style={{ color: '#64748B' }}>Rate per Kg:</span>
@@ -2704,12 +3158,16 @@ export default function App() {
                   <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
                     MIN ORDER QTY (MOQ)
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={editingProduct.moq || '500g'}
                     onChange={e => setEditingProduct({ ...editingProduct, moq: e.target.value })}
-                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
-                  />
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem', fontWeight: '700' }}
+                  >
+                    <option value="250g">250g (3 Weight Options)</option>
+                    <option value="500g">500g (2 Weight Options)</option>
+                    <option value="100g">100g (Savory)</option>
+                    <option value="200g">200g (Savory)</option>
+                  </select>
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
@@ -2727,9 +3185,27 @@ export default function App() {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '10px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+                    250g / OPT 0 PRICE (₹)
+                  </label>
+                  <input
+                    type="number"
+                    value={editingProduct.p250 || Math.round((Number(editingProduct.p500 || 0)) * 0.5)}
+                    onChange={e => {
+                      const p = Number(e.target.value);
+                      setEditingProduct({ 
+                        ...editingProduct, 
+                        p250: p,
+                        opt0: `250g (₹${p})`
+                      });
+                    }}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
                     500g / OPT 1 PRICE (₹)
                   </label>
                   <input
@@ -2740,14 +3216,14 @@ export default function App() {
                       setEditingProduct({ 
                         ...editingProduct, 
                         p500: p,
-                        opt1: `${editingProduct.w1} (₹${p})`
+                        opt1: `${editingProduct.w1 || '500g'} (₹${p})`
                       });
                     }}
-                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
+                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#475569', marginBottom: '4px' }}>
                     1 Kg / OPT 2 PRICE (₹)
                   </label>
                   <input
@@ -2758,10 +3234,10 @@ export default function App() {
                       setEditingProduct({ 
                         ...editingProduct, 
                         p1k: p,
-                        opt2: `${editingProduct.w2} (₹${p})`
+                        opt2: `${editingProduct.w2 || '1 Kg'} (₹${p})`
                       });
                     }}
-                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
                   />
                 </div>
               </div>
@@ -2794,6 +3270,70 @@ export default function App() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL: CUSTOMER PAY NOW VIA UPI (FROM TRACKER)                */}
+      {/* ------------------------------------------------------------- */}
+      {selectedOrderForPay && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ background: '#fff', borderRadius: '20px', padding: '24px', maxWidth: '380px', width: '100%', textAlign: 'center' }}>
+            <h3 style={{ margin: '0 0 8px', fontSize: '1.2rem', color: '#4A121E', fontWeight: '800' }}>
+              Pay via UPI for {selectedOrderForPay.orderId}
+            </h3>
+            <div style={{ fontSize: '0.85rem', color: '#64748B', marginBottom: '14px' }}>
+              Amount Payable: <b style={{ color: '#059669', fontSize: '1.1rem' }}>₹{selectedOrderForPay.total}</b>
+            </div>
+
+            <div style={{ display: 'inline-block', background: '#fff', padding: '10px', borderRadius: '14px', border: '1px solid #CBD5E1', boxShadow: '0 4px 12px rgba(0,0,0,0.06)', marginBottom: '12px' }}>
+              <img
+                src="upi_qr.png"
+                alt="The Laddu Story Official UPI QR Code"
+                style={{ width: '190px', height: '190px', display: 'block', objectFit: 'contain' }}
+                onError={(e) => { e.target.src = 'images/TheLadduStory_Logo.jpg'; }}
+              />
+            </div>
+
+            <div style={{ fontSize: '0.84rem', fontWeight: '700', color: '#166534', marginBottom: '12px' }}>
+              UPI ID: <span style={{ fontFamily: 'monospace', background: '#DCFCE7', padding: '3px 8px', borderRadius: '6px' }}>neetikabhasin@okaxis</span>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText('neetikabhasin@okaxis');
+                  alert('UPI ID copied: neetikabhasin@okaxis');
+                }}
+                style={{ marginLeft: '6px', background: '#166534', color: '#fff', border: 'none', padding: '3px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: '800', cursor: 'pointer' }}
+              >
+                Copy
+              </button>
+            </div>
+
+            <a
+              href={`upi://pay?pa=neetikabhasin@okaxis&pn=The%20Laddu%20Story&am=${selectedOrderForPay.total}&cu=INR&tn=${encodeURIComponent(`Order ${selectedOrderForPay.orderId}`)}`}
+              style={{
+                display: 'block',
+                background: '#059669',
+                color: '#fff',
+                textDecoration: 'none',
+                padding: '10px 16px',
+                borderRadius: '8px',
+                fontSize: '0.88rem',
+                fontWeight: '800',
+                marginBottom: '10px'
+              }}
+            >
+              ⚡ Open UPI App & Pay ₹{selectedOrderForPay.total}
+            </a>
+
+            <button
+              onClick={() => setSelectedOrderForPay(null)}
+              style={{ background: '#F1F5F9', border: '1px solid #CBD5E1', padding: '10px 16px', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', color: '#475569', cursor: 'pointer', width: '100%' }}
+            >
+              Close
+            </button>
           </div>
         </div>
       )}

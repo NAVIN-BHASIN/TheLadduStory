@@ -231,6 +231,32 @@ export const updateOrderStatusInSupabase = async (orderId, newStatus) => {
 };
 
 /**
+ * Update order payment status and payment method in Supabase
+ */
+export const updateOrderPaymentStatusInSupabase = async (orderId, paymentStatus, paymentMethod) => {
+  if (!supabaseInstance) return { success: false, reason: 'NOT_CONFIGURED' };
+  try {
+    const payload = {
+      payment_status: paymentStatus,
+      updated_at: new Date().toISOString()
+    };
+    if (paymentMethod) {
+      payload.payment_method = paymentMethod;
+    }
+    const { error } = await supabaseInstance
+      .from('orders')
+      .update(payload)
+      .eq('order_id', orderId);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err) {
+    console.error('[Supabase] updateOrderPaymentStatus error:', err);
+    return { success: false, error: err.message };
+  }
+};
+
+/**
  * Fetch products from Supabase
  */
 export const fetchProductsFromSupabase = async () => {
@@ -244,27 +270,36 @@ export const fetchProductsFromSupabase = async () => {
     if (error) throw error;
     if (!data || data.length === 0) return null;
 
-    return data.map(p => ({
-      id: p.id,
-      sku: p.sku,
-      name: p.name,
-      category: p.category,
-      ratePerKg: Number(p.rate_per_kg),
-      moq: p.moq,
-      opt1: p.opt1,
-      opt2: p.opt2,
-      p500: Number(p.p500),
-      p1k: Number(p.p1k),
-      w1: p.w1,
-      w2: p.w2,
-      tag: p.tag,
-      desc: p.description,
-      benefit: p.benefit,
-      image: p.image,
-      stockStatus: p.stock_status,
-      stockCount: Number(p.stock_count),
-      isMunchy: !!p.is_munchy
-    }));
+    return data.map(p => {
+      const rateKg = Number(p.rate_per_kg || 0);
+      const p500Val = Number(p.p500 || 0);
+      const p1kVal = Number(p.p1k || 0);
+      const calculatedP250 = p.p250 ? Number(p.p250) : Math.round((rateKg || (p500Val * 2)) * 0.25);
+      return {
+        id: p.id,
+        sku: p.sku,
+        name: p.name,
+        category: p.category,
+        ratePerKg: rateKg,
+        moq: p.moq || '500g',
+        p250: calculatedP250,
+        p500: p500Val,
+        p1k: p1kVal,
+        opt0: p.opt0 || `250g (₹${calculatedP250})`,
+        opt1: p.opt1,
+        opt2: p.opt2,
+        w0: '250g',
+        w1: p.w1,
+        w2: p.w2,
+        tag: p.tag,
+        desc: p.description,
+        benefit: p.benefit,
+        image: p.image,
+        stockStatus: p.stock_status,
+        stockCount: Number(p.stock_count),
+        isMunchy: !!p.is_munchy
+      };
+    });
   } catch (err) {
     console.error('[Supabase] fetchProducts error:', err);
     return null;
