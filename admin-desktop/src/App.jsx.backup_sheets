@@ -255,7 +255,7 @@ const INITIAL_PRODUCTS = [
 const MASTER_CUSTOMER_REGISTRY = {
   '9343207515': { name: 'Neetika', address: 'Xyz q23 blr 560103' },
   '9606312010': { name: 'Bhoomie Bhasin', address: '#15101, Prestige Tranquility, Budigere cross' },
-  '9686412342': { name: 'Navin Bhasin', address: 'Direct Pickup / Bangalore Express Delivery' },
+  '9343207515': { name: 'Navin Bhasin', address: 'Direct Pickup / Bangalore Express Delivery' },
   '1111111111': { name: 'SUDARSHAN LAL BHASIN', address: 'Bangalore' },
   '9845012345': { name: 'Dr. Ananya Sharma', address: 'Koramangala, Bangalore' },
   '9900188776': { name: 'Vikas Sundaram', address: 'Indiranagar, Bangalore' }
@@ -326,7 +326,7 @@ const MASTER_OMS_ORDERS = [
     time: '10/11/26, 8:04 AM',
     channel: 'ONLINE_STORE',
     name: 'Navin Bhasin',
-    phone: '9686412342',
+    phone: '9343207515',
     address: 'Direct Pickup / Bangalore Express Delivery',
     status: 'PREPARING',
     total: 2350,
@@ -1799,7 +1799,7 @@ export default function App() {
                     <input
                       id="customer-login-phone-input"
                       type="tel"
-                      placeholder="e.g. 9343207515 or 9686412342"
+                      placeholder="e.g. 9343207515 or 9343207525"
                       value={loginPhoneInput}
                       onChange={e => setLoginPhoneInput(e.target.value)}
                       required

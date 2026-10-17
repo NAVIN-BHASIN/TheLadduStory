@@ -1329,7 +1329,7 @@ export default function App() {
     const cleanPhone = custPhone.replace(/\D/g, '').slice(-10);
 
     const note = cleanPickupNote(custAddress);
-    const pickupLoc = 'Self-Pickup: @15101, Tower-15, Prestige Tranquility, Budigere Cross, BLR - 560049; Contact - 9686412342';
+    const pickupLoc = 'Self-Pickup: @15101, Tower-15, Prestige Tranquility, Budigere Cross, BLR - 560049; Contact - 9343207515';
     const resolvedAddress = fulfillmentType === 'PICKUP'
       ? (note ? `${pickupLoc} [Note: ${note}]` : pickupLoc)
       : custAddress.trim();
@@ -1672,7 +1672,7 @@ export default function App() {
                 type="button"
                 id="select-doorstep-btn"
                 onClick={() => {
-                  setDeliveryNotice('⚠️ Doorstep Delivery is currently unavailable. Orders are exclusively available for Self-Pickup at @15101, Tower-15, Prestige Tranquility, Budigere Cross, BLR - 560049; Contact - 9686412342.');
+                  setDeliveryNotice('⚠️ Doorstep Delivery is currently unavailable. Orders are exclusively available for Self-Pickup at @15101, Tower-15, Prestige Tranquility, Budigere Cross, BLR - 560049; Contact - 9343207515.');
                   setFulfillmentType('PICKUP');
                 }}
                 style={{
@@ -1773,7 +1773,7 @@ export default function App() {
                 </div>
                 <div style={{ fontWeight: '600' }}>@15101, Tower-15, Prestige Tranquility, Budigere Cross, BLR - 560049</div>
                 <div style={{ marginTop: '4px', color: '#1E3A8A' }}>
-                  📞 <b>Pickup Contact:</b> <a href="tel:9686412342" style={{ color: '#1D4ED8', fontWeight: '800', textDecoration: 'none' }}>9686412342</a>
+                  📞 <b>Pickup Contact:</b> <a href="tel:9343207515" style={{ color: '#1D4ED8', fontWeight: '800', textDecoration: 'none' }}>9343207515</a>
                 </div>
               </div>
             )}
@@ -2515,7 +2515,7 @@ export default function App() {
                         <input
                           id="track-signin-phone"
                           type="tel"
-                          placeholder="e.g. 9686412342"
+                          placeholder="e.g. 9343207525"
                           value={loginPhoneInput}
                           onChange={e => setLoginPhoneInput(e.target.value)}
                           required
@@ -2599,7 +2599,7 @@ export default function App() {
                         <input
                           id="track-reg-phone"
                           type="tel"
-                          placeholder="e.g. 9686412342"
+                          placeholder="e.g. 9343207525"
                           value={regPhone}
                           onChange={e => setRegPhone(e.target.value)}
                           required
@@ -2855,7 +2855,7 @@ export default function App() {
                   <div style={{ background: '#fff', borderRadius: '16px', padding: '40px', textAlign: 'center', border: '1px solid #E2E8F0', color: '#64748B' }}>
                     <div style={{ fontSize: '2rem', marginBottom: '8px' }}>🔍</div>
                     <div style={{ fontWeight: '700' }}>No orders found matching "{searchQuery}".</div>
-                    <div style={{ fontSize: '0.82rem', marginTop: '4px' }}>Try searching by phone number (e.g. 9686412341 or 9686412342), customer name, or order ID.</div>
+                    <div style={{ fontSize: '0.82rem', marginTop: '4px' }}>Try searching by phone number (e.g. 9343207515 or 9343207525), customer name, or order ID.</div>
                   </div>
                 ) : (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '18px' }}>
@@ -4159,7 +4159,7 @@ export default function App() {
                     <input
                       id="modal-signin-phone"
                       type="tel"
-                      placeholder="e.g. 9686412342"
+                      placeholder="e.g. 9343207525"
                       value={loginPhoneInput}
                       onChange={e => setLoginPhoneInput(e.target.value)}
                       required
@@ -4241,7 +4241,7 @@ export default function App() {
                     <input
                       id="modal-reg-phone"
                       type="tel"
-                      placeholder="e.g. 9686412342"
+                      placeholder="e.g. 9343207525"
                       value={regPhone}
                       onChange={e => setRegPhone(e.target.value)}
                       required
@@ -4364,7 +4364,7 @@ export default function App() {
                 {cart.map(i => `${i.qty}x ${i.name} (${i.cleanWeight || i.packLabel})`).join(', ')}
               </div>
               <div style={{ borderTop: '1px dashed #CBD5E1', paddingTop: '6px', fontSize: '0.78rem', color: '#1E40AF' }}>
-                📍 <b>Self-Pickup Location:</b> @15101, Tower-15, Prestige Tranquility, Budigere Cross, BLR - 560049 (Contact: 9686412342)
+                📍 <b>Self-Pickup Location:</b> @15101, Tower-15, Prestige Tranquility, Budigere Cross, BLR - 560049 (Contact: 9343207515)
               </div>
             </div>
 
