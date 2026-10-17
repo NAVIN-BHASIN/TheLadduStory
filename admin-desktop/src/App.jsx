@@ -514,6 +514,7 @@ export default function App() {
   const [isStaffRoute, setIsStaffRoute] = useState(isStaffUrl);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(null);
+  const [showConfirmOrderModal, setShowConfirmOrderModal] = useState(false);
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
   const [addedToast, setAddedToast] = useState('');
 
@@ -631,7 +632,9 @@ export default function App() {
         (orderPayload) => {
           if (orderPayload.eventType === 'UPDATE' && orderPayload.new) {
             const o = orderPayload.new;
-            setOrders(prev => prev.map(item => item.orderId === o.order_id ? { ...item, status: o.order_status } : item));
+            const statusMatch = (o.notes || '').match(/\[STATUS:([^\]]+)\]/);
+            const resolvedStatus = statusMatch ? statusMatch[1].trim() : o.order_status;
+            setOrders(prev => prev.map(item => item.orderId === o.order_id ? { ...item, status: resolvedStatus } : item));
             setIsCloudSynced(true);
             setLastSyncTime(new Date().toLocaleTimeString());
           } else if (orderPayload.eventType === 'INSERT' && orderPayload.new) {
@@ -713,9 +716,37 @@ export default function App() {
       };
     } catch(err) {}
 
+    // Periodic background sync every 10 seconds for seamless multi-device updates
+    const syncInterval = setInterval(() => {
+      if (isSupabaseConfigured() && typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchOrdersFromSupabase().then(latestOrders => {
+          if (latestOrders && latestOrders.length > 0) {
+            setOrders(latestOrders);
+          }
+        });
+      }
+    }, 10000);
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible' && isSupabaseConfigured()) {
+        fetchOrdersFromSupabase().then(latestOrders => {
+          if (latestOrders && latestOrders.length > 0) {
+            setOrders(latestOrders);
+          }
+        });
+      }
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+
     return () => {
       if (es) es.close();
       if (typeof unsubSupabase === 'function') unsubSupabase();
+      clearInterval(syncInterval);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
     };
   }, []);
 
@@ -1262,10 +1293,10 @@ export default function App() {
     }
   };
 
-  // CHECKOUT
-  const handleCheckout = async (e) => {
-    e.preventDefault();
-    if (isSubmitting) return; // Prevent double-clicks / duplicate submissions
+  // 1. PRE-CHECKOUT: Validation & Review Modal
+  const handlePreCheckout = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (isSubmitting) return;
     if (cart.length === 0) {
       alert('Your cart is empty! Please select delicious laddus to place order.');
       return;
@@ -1274,18 +1305,33 @@ export default function App() {
       alert('Please fill in your Name and 10-Digit Mobile Number.');
       return;
     }
+    const cleanPhone = custPhone.replace(/\D/g, '').slice(-10);
+    if (cleanPhone.length !== 10) {
+      alert('Please provide a valid 10-digit mobile number.');
+      return;
+    }
     if (fulfillmentType === 'DELIVERY' && !custAddress.trim()) {
       alert('Please provide your Doorstep Delivery Address.');
       return;
     }
 
+    // Open Confirmation Modal to ask if customer wants to add more items
+    setShowConfirmOrderModal(true);
+  };
+
+  // 2. FINAL EXECUTION: Place the Order
+  const executeCheckout = async () => {
+    if (isSubmitting) return;
     setIsSubmitting(true);
+    setShowConfirmOrderModal(false);
+
     const orderId = `TLS-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.floor(1000 + Math.random() * 9000)}`;
     const cleanPhone = custPhone.replace(/\D/g, '').slice(-10);
 
     const note = cleanPickupNote(custAddress);
+    const pickupLoc = 'Self-Pickup: @15101, Tower-15, Prestige Tranquility, Budigere Cross, BLR - 560049; Contact - 9686412342';
     const resolvedAddress = fulfillmentType === 'PICKUP'
-      ? (note ? `Store Self-Pickup: The Laddu Story Kitchen, Bangalore (Note: ${note})` : 'Store Self-Pickup: The Laddu Story Kitchen, Bangalore')
+      ? (note ? `${pickupLoc} [Note: ${note}]` : pickupLoc)
       : custAddress.trim();
 
     const newOrder = {
@@ -1378,52 +1424,52 @@ export default function App() {
 
   // Update order delivery status & broadcast in Real-Time to all devices + Google Sheets
   const updateOrderStatus = async (orderId, newStatus) => {
-    const updated = orders.map(o => o.orderId === orderId ? { ...o, status: newStatus } : o);
-    setOrders(updated);
-    try {
-      localStorage.setItem('tls_orders_db', JSON.stringify(updated));
-    } catch (e) {}
+    // 1. Instant optimistic state update across all components
+    setOrders(prev => {
+      const updated = prev.map(o => o.orderId === orderId ? { ...o, status: newStatus } : o);
+      try {
+        localStorage.setItem('tls_orders_db', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
 
-    // 1. Instant Real-Time Push to all Customer & Staff devices (0ms delay)
-    try {
-      await fetch(REALTIME_TOPIC_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'STATUS_UPDATE',
-          orderId,
-          status: newStatus,
-          timestamp: new Date().toISOString()
-        })
-      });
-      setIsCloudSynced(true);
-      setLastSyncTime(new Date().toLocaleTimeString());
-    } catch(err) {}
+    setIsCloudSynced(true);
+    setLastSyncTime(new Date().toLocaleTimeString());
 
-    // 2. Direct Update in Google Sheets via Apps Script Web App (Kept intact)
-    try {
-      await fetch(APPS_SCRIPT_EXEC_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({
-          action: 'updateStatus',
-          orderId,
-          status: newStatus,
-          items: []
-        })
-      });
-    } catch(err) {}
+    // 2. Instant Real-Time Push to all Customer & Staff devices (non-blocking)
+    fetch(REALTIME_TOPIC_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'STATUS_UPDATE',
+        orderId,
+        status: newStatus,
+        timestamp: new Date().toISOString()
+      })
+    }).catch(() => {});
 
-    // 3. Instant ACID Write-Back to Supabase PostgreSQL
+    // 3. Direct Update in Google Sheets via Apps Script Web App (non-blocking)
+    fetch(APPS_SCRIPT_EXEC_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'updateStatus',
+        orderId,
+        status: newStatus,
+        items: []
+      })
+    }).catch(() => {});
+
+    // 4. Instant ACID Write-Back to Supabase PostgreSQL (with resilient constraint fallback)
     try {
-      await updateOrderStatusInSupabase(orderId, newStatus);
+      const sbRes = await updateOrderStatusInSupabase(orderId, newStatus);
+      if (sbRes && !sbRes.success) {
+        console.warn('[Supabase] Status write-back failed:', sbRes.error);
+      }
     } catch(err) {
       console.warn('[Supabase] Status write-back notice:', err);
     }
-
-    // 3. Fallback cloud state
-    await syncWithCloud(updated, products);
   };
 
   // Re-sync all live data from Supabase Primary Database
@@ -1616,7 +1662,7 @@ export default function App() {
             ))}
           </div>
 
-          {/* Fulfillment Method Selection (Default: Store Self-Pickup) */}
+          {/* Fulfillment Method Selection (Default: Self-Pickup) */}
           <div style={{ marginBottom: '14px' }}>
             <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '800', color: '#4A121E', marginBottom: '6px' }}>
               SELECT DELIVERY / PICKUP METHOD:
@@ -1626,7 +1672,7 @@ export default function App() {
                 type="button"
                 id="select-doorstep-btn"
                 onClick={() => {
-                  setDeliveryNotice('⚠️ Door Step Delivery is not functional at this moment. Orders are exclusively available for Store Self-Pickup at our Bangalore Kitchen.');
+                  setDeliveryNotice('⚠️ Doorstep Delivery is currently unavailable. Orders are exclusively available for Self-Pickup at @15101, Tower-15, Prestige Tranquility, Budigere Cross, BLR - 560049; Contact - 9686412342.');
                   setFulfillmentType('PICKUP');
                 }}
                 style={{
@@ -1660,7 +1706,7 @@ export default function App() {
                   cursor: 'pointer'
                 }}
               >
-                🛍️ Store Self-Pickup (Selected)
+                🛍️ Self-Pickup (Selected)
               </button>
             </div>
 
@@ -1721,8 +1767,14 @@ export default function App() {
               style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem', marginBottom: '8px' }}
             />
             {fulfillmentType === 'PICKUP' && (
-              <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', padding: '8px 10px', borderRadius: '6px', fontSize: '0.75rem', color: '#1E40AF', marginBottom: '8px' }}>
-                📍 <b>Kitchen Pickup:</b> The Laddu Story Artisanal Kitchen, Bangalore. Freshly packed & ready for collection!
+              <div style={{ background: '#EFF6FF', border: '1.5px solid #93C5FD', padding: '12px 14px', borderRadius: '10px', fontSize: '0.82rem', color: '#1E3A8A', marginBottom: '10px', lineHeight: '1.5' }}>
+                <div style={{ fontWeight: '800', color: '#1E40AF', marginBottom: '3px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  📍 Self-Pickup Location:
+                </div>
+                <div style={{ fontWeight: '600' }}>@15101, Tower-15, Prestige Tranquility, Budigere Cross, BLR - 560049</div>
+                <div style={{ marginTop: '4px', color: '#1E3A8A' }}>
+                  📞 <b>Pickup Contact:</b> <a href="tel:9686412342" style={{ color: '#1D4ED8', fontWeight: '800', textDecoration: 'none' }}>9686412342</a>
+                </div>
               </div>
             )}
             <textarea
@@ -1742,7 +1794,7 @@ export default function App() {
               <span>₹{cartTotal.toLocaleString('en-IN')}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#059669', marginBottom: '8px', fontWeight: '600' }}>
-              <span>{fulfillmentType === 'PICKUP' ? 'Store Pickup Collection' : 'Bangalore Express Delivery'}</span>
+              <span>{fulfillmentType === 'PICKUP' ? 'Self-Pickup Collection' : 'Bangalore Express Delivery'}</span>
               <span>FREE</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', fontWeight: '800', color: '#4A121E' }}>
@@ -1753,7 +1805,7 @@ export default function App() {
 
           <button
             id="place-order-btn"
-            onClick={handleCheckout}
+            onClick={handlePreCheckout}
             disabled={isSubmitting}
             style={{
               width: '100%',
@@ -1941,10 +1993,12 @@ export default function App() {
 
       {/* SUB-HEADER STATUS BAR */}
       <div style={{ background: '#FFFBEB', borderBottom: '1px solid #FDE68A', padding: '7px 20px', fontSize: '0.8rem', color: '#78350F', textAlign: 'center', fontWeight: '500' }}>
-        <span>🌿 Pure Desi Cow Ghee & Unrefined Jaggery • Zero White Sugar • Freshly Prepared in Bangalore • </span>
-        <span style={{ color: isCloudSynced ? '#059669' : '#D97706', fontWeight: '700' }}>
-          ● Real-Time Cloud Sync Active (Synced {lastSyncTime})
-        </span>
+        <span>🌿 Pure Desi Cow Ghee & Unrefined Jaggery • Zero White Sugar • Freshly Prepared in Bangalore</span>
+        {(isStaffRoute || isAdminLoggedIn) && (
+          <span style={{ color: isCloudSynced ? '#059669' : '#D97706', fontWeight: '700', marginLeft: '6px' }}>
+            • ● Real-Time Cloud Sync Active (Synced {lastSyncTime})
+          </span>
+        )}
       </div>
 
       {/* ADDED TO CART TOAST NOTIFICATION */}
@@ -2238,21 +2292,34 @@ export default function App() {
                                 <span style={{ fontWeight: '800', color: '#4A121E', fontSize: '1.1rem' }}>{o.orderId}</span>
                                 <span style={{ fontSize: '0.8rem', color: '#64748B', marginLeft: '10px' }}>{o.time}</span>
                               </div>
-                              <span style={{ background: '#FEF3C7', color: '#92400E', padding: '4px 12px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: '800' }}>
-                                ⏳ {o.status}
+                              <span style={{ 
+                                background: o.status === 'PREPARING' ? '#FEF3C7' : (o.status === 'READY FOR PICKUP' ? '#ECFDF5' : (o.status === 'PACKED' ? '#E0F2FE' : '#F1F5F9')), 
+                                color: o.status === 'PREPARING' ? '#92400E' : (o.status === 'READY FOR PICKUP' ? '#065F46' : (o.status === 'PACKED' ? '#0369A1' : '#475569')), 
+                                padding: '4px 12px', 
+                                borderRadius: '12px', 
+                                fontSize: '0.8rem', 
+                                fontWeight: '800' 
+                              }}>
+                                {o.status === 'PREPARING' ? '⏳ Preparing in Cow Ghee' : (o.status === 'READY FOR PICKUP' ? '🛍️ Ready for Pickup' : (o.status === 'PACKED' ? '📦 Box Packed' : (o.status === 'RECEIVED' ? '🟡 Order Received' : o.status)))}
                               </span>
                             </div>
 
                             {/* Live Step Progress Indicator */}
                             <div style={{ background: '#FAF6F0', padding: '16px', borderRadius: '12px', marginBottom: '16px', border: '1px solid #F1F5F9' }}>
                               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', textAlign: 'center', gap: '6px' }}>
-                                {[
+                                {(isOrderPickup ? [
+                                  { label: 'Received', step: 1 },
+                                  { label: 'Preparing in Cow Ghee', step: 2 },
+                                  { label: 'Box Packed', step: 3 },
+                                  { label: 'Ready for Pickup', step: 4 },
+                                  { label: 'Order Picked Up', step: 5 }
+                                ] : [
                                   { label: 'Received', step: 1 },
                                   { label: 'Preparing in Cow Ghee', step: 2 },
                                   { label: 'Box Packed', step: 3 },
                                   { label: 'Out for Delivery', step: 4 },
                                   { label: 'Delivered', step: 5 }
-                                ].map(s => {
+                                ]).map(s => {
                                   const isDone = stepIndex >= s.step;
                                   return (
                                     <div key={s.step}>
@@ -2345,8 +2412,15 @@ export default function App() {
                               <b style={{ color: '#4A121E', fontSize: '0.95rem' }}>{o.orderId}</b>
                               <span style={{ fontSize: '0.75rem', color: '#64748B', marginLeft: '8px' }}>{o.time}</span>
                             </div>
-                            <span style={{ background: '#DEF7EC', color: '#03543F', padding: '3px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: '800' }}>
-                              ✓ DELIVERED
+                            <span style={{ 
+                              background: o.status === 'CANCELLED' ? '#FEE2E2' : '#DEF7EC', 
+                              color: o.status === 'CANCELLED' ? '#991B1B' : '#03543F', 
+                              padding: '3px 10px', 
+                              borderRadius: '12px', 
+                              fontSize: '0.75rem', 
+                              fontWeight: '800' 
+                            }}>
+                              ✓ {o.status || 'COMPLETED'}
                             </span>
                           </div>
                           <div style={{ fontSize: '0.85rem', color: '#475569', marginBottom: '10px' }}>
@@ -4252,6 +4326,91 @@ export default function App() {
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL: ORDER CONFIRMATION & UPSELL CHECK                      */}
+      {/* ------------------------------------------------------------- */}
+      {showConfirmOrderModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <div style={{ background: '#FFFFFF', borderRadius: '24px', padding: '28px 24px', maxWidth: '480px', width: '100%', boxShadow: '0 25px 60px rgba(74, 18, 30, 0.35)', border: '2px solid #FDE68A', textAlign: 'center' }}>
+            
+            {/* Emblem */}
+            <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: '#FFFBEB', border: '2px solid #B45309', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem', margin: '0 auto 12px' }}>
+              🥣
+            </div>
+
+            <div style={{ fontSize: '0.75rem', fontWeight: '800', color: '#B45309', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: '4px' }}>
+              The Laddu Story • Final Review
+            </div>
+
+            <h3 style={{ margin: '0 0 10px', fontSize: '1.35rem', fontWeight: '800', color: '#4A121E' }}>
+              Wait! Have you added all your favourites? ✨
+            </h3>
+
+            <p style={{ fontSize: '0.86rem', color: '#64748B', lineHeight: '1.5', margin: '0 0 18px' }}>
+              Our pure Desi Cow Ghee laddus & roasted munchies taste even better when shared with family! Would you like to add anything more, or proceed to confirm your order?
+            </p>
+
+            {/* Quick Cart Summary Box */}
+            <div style={{ background: '#FAF6F0', borderRadius: '12px', padding: '12px 14px', marginBottom: '20px', border: '1px solid #E2E8F0', textAlign: 'left', fontSize: '0.82rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '800', color: '#4A121E', marginBottom: '6px' }}>
+                <span>Order Summary ({totalCartQty} items):</span>
+                <span>₹{cartTotal.toLocaleString('en-IN')}</span>
+              </div>
+              <div style={{ color: '#64748B', marginBottom: '6px' }}>
+                {cart.map(i => `${i.qty}x ${i.name} (${i.cleanWeight || i.packLabel})`).join(', ')}
+              </div>
+              <div style={{ borderTop: '1px dashed #CBD5E1', paddingTop: '6px', fontSize: '0.78rem', color: '#1E40AF' }}>
+                📍 <b>Self-Pickup Location:</b> @15101, Tower-15, Prestige Tranquility, Budigere Cross, BLR - 560049 (Contact: 9686412342)
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowConfirmOrderModal(false);
+                  setIsMobileCartOpen(false);
+                }}
+                style={{
+                  flex: 1,
+                  background: '#F1F5F9',
+                  color: '#475569',
+                  border: '1.5px solid #CBD5E1',
+                  padding: '12px',
+                  borderRadius: '10px',
+                  fontWeight: '800',
+                  fontSize: '0.88rem',
+                  cursor: 'pointer'
+                }}
+              >
+                ＋ Add More Items
+              </button>
+              <button
+                type="button"
+                onClick={executeCheckout}
+                disabled={isSubmitting}
+                style={{
+                  flex: 1.4,
+                  background: 'linear-gradient(135deg, #4A121E 0%, #831843 100%)',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  padding: '12px',
+                  borderRadius: '10px',
+                  fontWeight: '800',
+                  fontSize: '0.88rem',
+                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 4px 14px rgba(74, 18, 30, 0.3)'
+                }}
+              >
+                {isSubmitting ? '⏳ Placing...' : `✓ Yes, Place Order (₹${cartTotal.toLocaleString('en-IN')}) →`}
+              </button>
+            </div>
+
           </div>
         </div>
       )}

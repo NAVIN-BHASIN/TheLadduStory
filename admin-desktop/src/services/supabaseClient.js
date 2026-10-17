@@ -115,6 +115,10 @@ export const fetchOrdersFromSupabase = async () => {
 
     return (orders || []).map(o => {
       const isPickup = (o.channel && o.channel.includes('PICKUP')) || (o.notes && o.notes.includes('PICKUP'));
+      const statusMatch = (o.notes || '').match(/\[STATUS:([^\]]+)\]/);
+      const resolvedStatus = statusMatch ? statusMatch[1].trim() : o.order_status;
+      const cleanNotes = (o.notes || '').replace(/\[STATUS:[^\]]+\]/g, '').trim();
+
       return {
         orderId: o.order_id,
         time: new Date(o.created_at).toLocaleString('en-US', {
@@ -126,11 +130,11 @@ export const fetchOrdersFromSupabase = async () => {
         name: o.customer_name,
         phone: o.customer_phone,
         address: o.customer_address,
-        status: o.order_status,
+        status: resolvedStatus,
         paymentMethod: o.payment_method || 'UPI',
         paymentStatus: o.payment_status || 'PAID',
         total: Number(o.total_amount),
-        notes: o.notes || '',
+        notes: cleanNotes,
         items: itemsByOrder[o.order_id] || []
       };
     });
@@ -209,21 +213,55 @@ export const insertOrderToSupabase = async (order) => {
 };
 
 /**
- * Update order status with instant write-back
+ * Update order status with instant write-back and resilient check-constraint fallback
  */
 export const updateOrderStatusInSupabase = async (orderId, newStatus) => {
   if (!supabaseInstance) return { success: false, reason: 'NOT_CONFIGURED' };
   try {
+    // Retrieve existing notes to handle status tag cleanly
+    const { data: existing } = await supabaseInstance
+      .from('orders')
+      .select('notes')
+      .eq('order_id', orderId)
+      .maybeSingle();
+
+    const rawNotes = existing && existing.notes ? existing.notes : '';
+    const cleanNotes = rawNotes.replace(/\[STATUS:[^\]]+\]/g, '').trim();
+
+    // 1. Attempt direct update of order_status (also removing previous status tag from notes)
     const { error } = await supabaseInstance
       .from('orders')
       .update({
         order_status: newStatus,
+        notes: cleanNotes,
         updated_at: new Date().toISOString()
       })
       .eq('order_id', orderId);
 
-    if (error) throw error;
-    return { success: true };
+    if (!error) return { success: true };
+
+    // 2. If Postgres check constraint rejects (e.g. PREPARING / READY FOR PICKUP), embed true status in notes
+    console.warn('[Supabase] Custom status rejected by check constraint, embedding in notes tag:', error.message);
+    const updatedNotes = `${cleanNotes} [STATUS:${newStatus}]`.trim();
+
+    // Map to acceptable legacy DB constraint status
+    let safeDbStatus = 'RECEIVED';
+    if (newStatus === 'CANCELLED') safeDbStatus = 'CANCELLED';
+    else if (newStatus === 'DELIVERED' || newStatus === 'ORDER PICKED UP') safeDbStatus = 'DELIVERED';
+    else if (newStatus === 'PACKED' || newStatus === 'READY FOR PICKUP') safeDbStatus = 'PACKED';
+    else if (newStatus === 'OUT FOR DELIVERY') safeDbStatus = 'DISPATCHED';
+
+    const { error: fallbackErr } = await supabaseInstance
+      .from('orders')
+      .update({
+        order_status: safeDbStatus,
+        notes: updatedNotes,
+        updated_at: new Date().toISOString()
+      })
+      .eq('order_id', orderId);
+
+    if (fallbackErr) throw fallbackErr;
+    return { success: true, fallback: true };
   } catch (err) {
     console.error('[Supabase] updateOrderStatus error:', err);
     return { success: false, error: err.message };

@@ -42,7 +42,7 @@ create table if not exists public.orders (
     total_amount numeric not null,
     payment_method text default 'UPI',
     payment_status text default 'PAID' check (payment_status in ('PAID', 'UNPAID', 'REFUNDED')),
-    order_status text default 'RECEIVED' check (order_status in ('RECEIVED', 'PACKED', 'DISPATCHED', 'DELIVERED', 'CANCELLED')),
+    order_status text default 'RECEIVED' check (order_status in ('RECEIVED', 'PREPARING', 'PACKED', 'READY FOR PICKUP', 'ORDER PICKED UP', 'OUT FOR DELIVERY', 'DELIVERED', 'CANCELLED', 'DISPATCHED')),
     notes text,
     updated_at timestamptz default now()
 );
