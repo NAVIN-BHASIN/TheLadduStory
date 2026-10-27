@@ -2353,116 +2353,163 @@ export default function App() {
 
           {/* Navigation Actions */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <button
-              id="nav-store-btn"
-              onClick={() => setActiveTab('store')}
-              style={{
-                background: activeTab === 'store' ? '#FFFFFF' : 'transparent',
-                color: activeTab === 'store' ? '#4A121E' : '#FFFFFF',
-                border: '1px solid rgba(255,255,255,0.4)',
-                padding: '8px 14px',
-                borderRadius: '8px',
-                fontWeight: '700',
-                fontSize: '0.85rem',
-                cursor: 'pointer'
-              }}
-            >
-              🛍️ Order Laddus
-            </button>
-
-            {/* Customer Login / My Orders Badge */}
-            {customerUser ? (
-              <div style={{ display: 'flex', alignItems: 'center', background: '#FDE68A', borderRadius: '8px', padding: '2px 4px' }}>
+            {/* If on Customer Route (!isStaffRoute): Strictly Show Customer Experience Only */}
+            {!isStaffRoute ? (
+              <>
                 <button
-                  id="nav-customer-profile-btn"
-                  onClick={() => setActiveTab('track')}
+                  id="nav-store-btn"
+                  onClick={() => setActiveTab('store')}
                   style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: '#4A121E',
-                    padding: '6px 10px',
-                    fontWeight: '800',
-                    fontSize: '0.82rem',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}
-                >
-                  👤 {customerUser.name} ({customerUser.phone})
-                </button>
-                <button
-                  id="nav-customer-logout-btn"
-                  onClick={handleCustomerLogout}
-                  title="Switch / Logout"
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: '#64748B',
-                    padding: '4px 6px',
-                    fontSize: '0.85rem',
-                    cursor: 'pointer'
-                  }}
-                >
-                  ✕
-                </button>
-              </div>
-            ) : (
-              <button
-                id="nav-customer-login-btn"
-                onClick={() => setShowCustomerLoginModal(true)}
-                style={{
-                  background: activeTab === 'track' ? '#FFFFFF' : 'rgba(255,255,255,0.15)',
-                  color: activeTab === 'track' ? '#4A121E' : '#FFFFFF',
-                  border: '1px solid rgba(255,255,255,0.4)',
-                  padding: '8px 14px',
-                  borderRadius: '8px',
-                  fontWeight: '700',
-                  fontSize: '0.85rem',
-                  cursor: 'pointer'
-                }}
-              >
-                👤 Customer Login
-              </button>
-            )}
-
-            {/* Staff OMS Login Button - Strictly isolated to Staff URL route */}
-            {isStaffRoute && (
-              isAdminLoggedIn ? (
-                <button
-                  id="nav-staff-dashboard-btn"
-                  onClick={() => setActiveTab('admin')}
-                  style={{
-                    background: activeTab === 'admin' ? '#FDE68A' : 'rgba(214, 229, 186, 0.3)',
-                    color: '#4A121E',
-                    border: 'none',
+                    background: activeTab === 'store' ? '#FFFFFF' : 'transparent',
+                    color: activeTab === 'store' ? '#4A121E' : '#FFFFFF',
+                    border: '1px solid rgba(255,255,255,0.4)',
                     padding: '8px 14px',
                     borderRadius: '8px',
-                    fontWeight: '800',
+                    fontWeight: '700',
                     fontSize: '0.85rem',
                     cursor: 'pointer'
                   }}
                 >
-                  ⚙️ Staff OMS ({orders.length})
+                  🛍️ Order Laddus
                 </button>
-              ) : (
+
+                {/* Customer Login / My Orders Badge */}
+                {customerUser ? (
+                  <div style={{ display: 'flex', alignItems: 'center', background: '#FDE68A', borderRadius: '8px', padding: '2px 4px' }}>
+                    <button
+                      id="nav-customer-profile-btn"
+                      onClick={() => setActiveTab('track')}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#4A121E',
+                        padding: '6px 10px',
+                        fontWeight: '800',
+                        fontSize: '0.82rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      👤 {customerUser.name} ({customerUser.phone})
+                    </button>
+                    <button
+                      id="nav-customer-logout-btn"
+                      onClick={handleCustomerLogout}
+                      title="Switch / Logout"
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#64748B',
+                        padding: '4px 6px',
+                        fontSize: '0.85rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    id="nav-customer-login-btn"
+                    onClick={() => setShowCustomerLoginModal(true)}
+                    style={{
+                      background: activeTab === 'track' ? '#FFFFFF' : 'rgba(255,255,255,0.15)',
+                      color: activeTab === 'track' ? '#4A121E' : '#FFFFFF',
+                      border: '1px solid rgba(255,255,255,0.4)',
+                      padding: '8px 14px',
+                      borderRadius: '8px',
+                      fontWeight: '700',
+                      fontSize: '0.85rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    👤 Customer Login
+                  </button>
+                )}
+              </>
+            ) : (
+              /* If on Staff Portal Route (isStaffRoute): Strictly Show Staff OMS & Staff Controls */
+              <>
                 <button
-                  id="nav-staff-login-btn"
-                  onClick={() => setShowLoginModal(true)}
+                  id="nav-store-btn"
+                  onClick={() => setActiveTab('store')}
                   style={{
-                    background: 'transparent',
-                    color: '#FDE68A',
-                    border: '1px dashed #FDE68A',
-                    padding: '8px 12px',
+                    background: activeTab === 'store' ? '#FFFFFF' : 'transparent',
+                    color: activeTab === 'store' ? '#4A121E' : '#FFFFFF',
+                    border: '1px solid rgba(255,255,255,0.4)',
+                    padding: '8px 14px',
                     borderRadius: '8px',
-                    fontSize: '0.82rem',
                     fontWeight: '700',
+                    fontSize: '0.85rem',
                     cursor: 'pointer'
                   }}
                 >
-                  🔒 Staff Login
+                  🛍️ View Store
                 </button>
-              )
+
+                {isAdminLoggedIn ? (
+                  <>
+                    <button
+                      id="nav-staff-dashboard-btn"
+                      onClick={() => setActiveTab('admin')}
+                      style={{
+                        background: activeTab === 'admin' ? '#FDE68A' : 'rgba(214, 229, 186, 0.3)',
+                        color: '#4A121E',
+                        border: 'none',
+                        padding: '8px 14px',
+                        borderRadius: '8px',
+                        fontWeight: '800',
+                        fontSize: '0.85rem',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ⚙️ Staff OMS ({orders.length})
+                    </button>
+                    <button
+                      id="nav-staff-header-logout-btn"
+                      onClick={() => {
+                        setIsAdminLoggedIn(false);
+                        try {
+                          sessionStorage.removeItem('tls_staff_logged_in');
+                        } catch (e) {}
+                        window.location.href = window.location.origin + window.location.pathname;
+                      }}
+                      style={{
+                        background: 'rgba(255,255,255,0.15)',
+                        color: '#FFFFFF',
+                        border: '1px solid rgba(255,255,255,0.3)',
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        fontSize: '0.82rem',
+                        fontWeight: '700',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      🚪 Exit Staff
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    id="nav-staff-login-btn"
+                    onClick={() => setShowLoginModal(true)}
+                    style={{
+                      background: '#FDE68A',
+                      color: '#4A121E',
+                      border: 'none',
+                      padding: '8px 14px',
+                      borderRadius: '8px',
+                      fontSize: '0.85rem',
+                      fontWeight: '800',
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
+                    }}
+                  >
+                    🔒 Staff Login
+                  </button>
+                )}
+              </>
             )}
           </div>
 
@@ -2472,9 +2519,9 @@ export default function App() {
       {/* SUB-HEADER STATUS BAR */}
       <div style={{ background: '#FFFBEB', borderBottom: '1px solid #FDE68A', padding: '7px 20px', fontSize: '0.8rem', color: '#78350F', textAlign: 'center', fontWeight: '500' }}>
         <span>🌿 Pure Desi Cow Ghee & Unrefined Jaggery • Zero White Sugar • Freshly Prepared in Bangalore</span>
-        {(isStaffRoute || isAdminLoggedIn) && (
+        {(isStaffRoute && isAdminLoggedIn) && (
           <span style={{ color: isCloudSynced ? '#059669' : '#D97706', fontWeight: '700', marginLeft: '6px' }}>
-            • ● Real-Time Cloud Sync Active (Synced {lastSyncTime})
+            • 🟢 Real-Time Cloud Sync Active (Synced {lastSyncTime})
           </span>
         )}
       </div>
