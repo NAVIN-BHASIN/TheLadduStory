@@ -19,7 +19,11 @@ import {
   verifyCustomerPassword,
   setCustomerPasswordInSupabase,
   registerCustomerInSupabase,
-  updateCustomerDetailsInSupabase
+  updateCustomerDetailsInSupabase,
+  updateOrderNotesInSupabase,
+  updateOrderPorterDetailsInSupabase,
+  fetchReviewsFromSupabase,
+  insertReviewToSupabase
 } from './services/supabaseClient';
 
 // OFFICIAL GOOGLE FORM CONFIGURATION (HEADLESS SYNC TO GOOGLE SHEETS)
@@ -364,9 +368,24 @@ export const cleanPickupNote = (note) => {
     .trim();
 };
 
+// PARSE PORTER DETAILS FROM ORDER NOTES
+export const getPorterDetails = (notes = '') => {
+  if (!notes || typeof notes !== 'string') return null;
+  const match = notes.match(/\[PORTER_INFO:\s*([^\]]+)\]/i);
+  if (!match) return null;
+  const raw = match[1];
+  const parts = raw.split('|');
+  const details = {};
+  parts.forEach(part => {
+    const [k, ...v] = part.split('=');
+    if (k) details[k.trim()] = v.join('=').trim();
+  });
+  return details;
+};
+
 
 // OFFICIAL CATALOG PRODUCT GALLERY IMAGES
-export const CATALOG_GALLERY_IMAGES = [
+const CATALOG_GALLERY_IMAGES = [
   { name: 'Ragi Walnut', file: 'images/products/RAGI-WALNUT.jpg' },
   { name: 'Till Sesame', file: 'images/products/TILL-BLACK-SESAME.jpg' },
   { name: 'Sattu Almond', file: 'images/products/SATTU-ALMOND.jpg' },
@@ -381,11 +400,83 @@ export const CATALOG_GALLERY_IMAGES = [
   { name: 'Savory Murmura', file: 'images/products/SAVORY-MURMURA.jpg' }
 ];
 
+// AUTHENTIC SEED REVIEWS & RATINGS FROM PILOT PATRONS
+const SEED_REVIEWS = [
+  {
+    id: 'rev-01',
+    productSku: 'RAGI-WALNUT',
+    productName: 'Ragi Walnut Laddu',
+    rating: 5,
+    customerName: 'Ananya Sharma',
+    customerPhone: '98451*****',
+    comment: 'Rich pure cow ghee aroma and zero white sugar! Perfectly balanced sweetness with unrefined jaggery. My diabetic parents loved it.',
+    createdAt: new Date(Date.now() - 86400000 * 5).toISOString()
+  },
+  {
+    id: 'rev-02',
+    productSku: 'SATTU-ALMOND',
+    productName: 'Sattu Almond Laddu',
+    rating: 5,
+    customerName: 'Rohit Nair',
+    customerPhone: '99002*****',
+    comment: 'High protein and sustained energy! Perfect post-workout snack with crunchy California almonds.',
+    createdAt: new Date(Date.now() - 86400000 * 4).toISOString()
+  },
+  {
+    id: 'rev-03',
+    productSku: 'DATES-DRY-FRUITS',
+    productName: 'Dates & Dry Fruits Bites',
+    rating: 5,
+    customerName: 'Pooja Kulkarni',
+    customerPhone: '97403*****',
+    comment: '100% naturally sweet and packed with nuts. Melt in the mouth and completely guilt-free!',
+    createdAt: new Date(Date.now() - 86400000 * 3).toISOString()
+  },
+  {
+    id: 'rev-04',
+    productSku: 'TILL-BLACK-SESAME',
+    productName: 'Till Laddu (Black Sesame)',
+    rating: 5,
+    customerName: 'Venkatesh Rao',
+    customerPhone: '98801*****',
+    comment: 'Authentic Ayurvedic recipe! Excellent warmth, great sesame flavor, and pure cow ghee richness.',
+    createdAt: new Date(Date.now() - 86400000 * 2).toISOString()
+  },
+  {
+    id: 'rev-05',
+    productSku: 'QUINOA-MOONG-DAL',
+    productName: 'Quinoa Moong Dal Laddu',
+    rating: 5,
+    customerName: 'Dr. Meera Iyer',
+    customerPhone: '94481*****',
+    comment: 'Very light on the stomach, soothing cardamom fragrance, and made with pure love. 10/10!',
+    createdAt: new Date(Date.now() - 86400000 * 1).toISOString()
+  },
+  {
+    id: 'rev-06',
+    productSku: 'SAVORY-MAKHANA',
+    productName: 'Savory Munchies (Roasted Makhana)',
+    rating: 5,
+    customerName: 'Karan Verma',
+    customerPhone: '96112*****',
+    comment: 'Slow roasted in pure cow ghee with Himalayan pink salt. The crunch is unbelievable!',
+    createdAt: new Date().toISOString()
+  }
+];
+
 export default function App() {
   // Navigation & View State
   const [activeTab, setActiveTab] = useState('store'); // 'store' | 'track' | 'admin'
-  const [adminSection, setAdminSection] = useState('orders'); // 'orders' | 'inventory'
-  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
+  const [adminSection, setAdminSection] = useState('orders'); // 'orders' | 'inventory' | 'reviews'
+  const [adminOrderViewMode, setAdminOrderViewMode] = useState('LIST'); // 'LIST' | 'KITCHEN_PREP'
+  const [kitchenStatusFilter, setKitchenStatusFilter] = useState('PENDING'); // 'PENDING' | 'RECEIVED_ONLY' | 'PREPARING_ONLY'
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(() => {
+    try {
+      return sessionStorage.getItem('tls_staff_logged_in') === 'true';
+    } catch(e) {
+      return false;
+    }
+  });
   const [adminPinInput, setAdminPinInput] = useState('');
   const [showLoginModal, setShowLoginModal] = useState(false);
 
@@ -494,8 +585,61 @@ export default function App() {
   const [custName, setCustName] = useState(() => customerUser ? customerUser.name : (localStorage.getItem('tls_cust_name') || ''));
   const [custPhone, setCustPhone] = useState(() => customerUser ? customerUser.phone : (localStorage.getItem('tls_cust_phone') || ''));
   const [custAddress, setCustAddress] = useState(() => customerUser ? cleanPickupNote(customerUser.address) : cleanPickupNote(localStorage.getItem('tls_cust_addr') || ''));
-  const [fulfillmentType, setFulfillmentType] = useState('PICKUP'); // Default to Store Self-Pickup
+  const [fulfillmentType, setFulfillmentType] = useState('PICKUP'); // 'PICKUP' | 'PORTER' | 'DELIVERY'
   const [deliveryNotice, setDeliveryNotice] = useState('');
+  const [showPorterOption, setShowPorterOption] = useState(false); // Controls Porter Service prompt
+  
+  // Porter Coordination State (Staff Admin)
+  const [editingPorterOrderId, setEditingPorterOrderId] = useState(null);
+  const [porterForm, setPorterForm] = useState({
+    status: 'Requested',
+    bookingId: '',
+    driverName: '',
+    driverPhone: '',
+    fare: '',
+    trackingUrl: ''
+  });
+  const [isSavingPorter, setIsSavingPorter] = useState(false);
+
+  // Staff Manual / WhatsApp Order Entry State
+  const [showStaffOrderModal, setShowStaffOrderModal] = useState(false);
+  const [staffOrderPhone, setStaffOrderPhone] = useState('');
+  const [staffOrderName, setStaffOrderName] = useState('');
+  const [staffOrderChannel, setStaffOrderChannel] = useState('WHATSAPP'); // 'WHATSAPP' | 'PHONE' | 'OFFLINE'
+  const [staffOrderFulfillment, setStaffOrderFulfillment] = useState('PICKUP'); // 'PICKUP' | 'PORTER' | 'DELIVERY'
+  const [staffOrderAddress, setStaffOrderAddress] = useState('');
+  const [staffOrderNotes, setStaffOrderNotes] = useState('');
+  const [staffOrderPaymentStatus, setStaffOrderPaymentStatus] = useState('PAID'); // 'PAID' | 'UNPAID'
+  const [staffOrderPaymentMethod, setStaffOrderPaymentMethod] = useState('UPI'); // 'UPI' | 'CASH' | 'WHATSAPP_UPI'
+  const [staffOrderItems, setStaffOrderItems] = useState([]);
+  const [staffSelectedProductSku, setStaffSelectedProductSku] = useState('01');
+  const [staffSelectedWeightKey, setStaffSelectedWeightKey] = useState('500g');
+  const [staffSelectedQty, setStaffSelectedQty] = useState(1);
+  const [staffCustomerLookupStatus, setStaffCustomerLookupStatus] = useState(null); // { found: bool, name, address, totalOrders }
+  const [isStaffSubmittingOrder, setIsStaffSubmittingOrder] = useState(false);
+  const [staffOrderCreatedSuccess, setStaffOrderCreatedSuccess] = useState(null);
+
+  // Product Reviews & Ratings State
+  const [reviews, setReviews] = useState(() => {
+    try {
+      const saved = localStorage.getItem('tls_reviews_db');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return SEED_REVIEWS;
+  });
+  const [selectedProductForReview, setSelectedProductForReview] = useState(null);
+  const [reviewRatingInput, setReviewRatingInput] = useState(5);
+  const [reviewNameInput, setReviewNameInput] = useState('');
+  const [reviewPhoneInput, setReviewPhoneInput] = useState('');
+  const [reviewCommentInput, setReviewCommentInput] = useState('');
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [reviewSuccessMsg, setReviewSuccessMsg] = useState('');
+  const [reviewProductFilter, setReviewProductFilter] = useState('ALL');
+  const [reviewRatingFilter, setReviewRatingFilter] = useState('ALL');
+
   const [paymentTiming, setPaymentTiming] = useState('NOW'); // 'NOW' | 'LATER'
   const [upiRefId, setUpiRefId] = useState('');
   const [selectedOrderForPay, setSelectedOrderForPay] = useState(null); // Customer pay-now modal
@@ -551,6 +695,12 @@ export default function App() {
     } catch (e) {}
   }, [products]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem('tls_reviews_db', JSON.stringify(reviews));
+    } catch (e) {}
+  }, [reviews]);
+
   // Auto-purge legacy mock cache so Supabase PostgreSQL is strictly primary
   useEffect(() => {
     try {
@@ -582,9 +732,13 @@ export default function App() {
 
   // REAL-TIME SUPABASE POSTGRESQL ENGINE & EVENT SUBSCRIPTION
   useEffect(() => {
-    // Auto-prompt staff login modal if ?staff is visited
-    if (isStaffUrl && !isAdminLoggedIn) {
-      setShowLoginModal(true);
+    // Auto-prompt staff login modal or direct to admin if ?staff visited
+    if (isStaffUrl) {
+      if (isAdminLoggedIn) {
+        setActiveTab('admin');
+      } else {
+        setShowLoginModal(true);
+      }
     }
 
     // Initial Supabase Data Fetch & Realtime WebSocket Channel
@@ -625,6 +779,18 @@ export default function App() {
       fetchProductsFromSupabase().then(dbProducts => {
         if (dbProducts && dbProducts.length > 0) {
           setProducts(dbProducts);
+        }
+      });
+
+      fetchReviewsFromSupabase().then(dbReviews => {
+        if (dbReviews && dbReviews.length > 0) {
+          setReviews(prev => {
+            const map = new Map();
+            SEED_REVIEWS.forEach(r => map.set(r.id, r));
+            prev.forEach(r => map.set(r.id, r));
+            dbReviews.forEach(r => map.set(r.id, r));
+            return Array.from(map.values());
+          });
         }
       });
 
@@ -1198,6 +1364,254 @@ export default function App() {
     } catch(e) {}
   };
 
+  // Staff Phone Lookup & Auto-fill Handler
+  const handleStaffOrderPhoneLookup = async (phoneInput) => {
+    setStaffOrderPhone(phoneInput);
+    const cleanPhone = (phoneInput || '').replace(/\D/g, '').slice(-10);
+    if (cleanPhone.length === 10) {
+      // 1. First check existing orders in memory for fastest auto-population
+      const matchedOrder = orders.find(o => (o.phone || '').replace(/\D/g, '').slice(-10) === cleanPhone);
+      let customerName = matchedOrder ? matchedOrder.name : '';
+      let customerAddress = matchedOrder ? cleanPickupNote(matchedOrder.address || '') : '';
+      const orderCount = orders.filter(o => (o.phone || '').replace(/\D/g, '').slice(-10) === cleanPhone).length;
+
+      // 2. Also check Supabase customers table
+      try {
+        const remoteCust = await lookupCustomerInSupabase(cleanPhone);
+        if (remoteCust) {
+          if (remoteCust.name) customerName = remoteCust.name;
+          if (remoteCust.address) customerAddress = cleanPickupNote(remoteCust.address);
+        }
+      } catch (e) {}
+
+      if (customerName) {
+        setStaffOrderName(customerName);
+        if (customerAddress && !staffOrderAddress) setStaffOrderAddress(customerAddress);
+        setStaffCustomerLookupStatus({
+          found: true,
+          name: customerName,
+          address: customerAddress,
+          totalOrders: orderCount
+        });
+      } else {
+        setStaffCustomerLookupStatus({ found: false });
+      }
+    } else {
+      setStaffCustomerLookupStatus(null);
+    }
+  };
+
+  // Staff Order Items: Add Selected Item
+  const handleStaffAddOrderItem = () => {
+    const prod = products.find(p => p.sku === staffSelectedProductSku) || products[0];
+    if (!prod) return;
+
+    let unitPrice = 0;
+    if (staffSelectedWeightKey === '250g') {
+      unitPrice = prod.p250 || (prod.ratePerKg ? Math.round(prod.ratePerKg * 0.25) : 300);
+    } else if (staffSelectedWeightKey === '500g') {
+      unitPrice = prod.p500 || (prod.ratePerKg ? Math.round(prod.ratePerKg * 0.5) : 600);
+    } else if (staffSelectedWeightKey === '1Kg' || staffSelectedWeightKey === '1000g') {
+      unitPrice = prod.p1k || prod.ratePerKg || 1200;
+    } else if (staffSelectedWeightKey === '100g') {
+      unitPrice = prod.p500 || 275;
+    } else if (staffSelectedWeightKey === '200g') {
+      unitPrice = prod.p1k || 550;
+    } else if (staffSelectedWeightKey === '400g') {
+      unitPrice = prod.p1k || 400;
+    } else {
+      unitPrice = prod.p500 || prod.ratePerKg || 600;
+    }
+
+    const newItem = {
+      sku: prod.sku,
+      name: prod.name,
+      weight: staffSelectedWeightKey,
+      cleanWeight: staffSelectedWeightKey,
+      packLabel: staffSelectedWeightKey,
+      unitPrice: Number(unitPrice),
+      qty: Math.max(1, parseInt(staffSelectedQty, 10) || 1),
+      image: prod.image
+    };
+
+    const existingIdx = staffOrderItems.findIndex(it => it.sku === newItem.sku && it.cleanWeight === newItem.cleanWeight);
+    if (existingIdx >= 0) {
+      const copy = [...staffOrderItems];
+      copy[existingIdx].qty += newItem.qty;
+      setStaffOrderItems(copy);
+    } else {
+      setStaffOrderItems([...staffOrderItems, newItem]);
+    }
+  };
+
+  // Staff Order Items: Remove Item
+  const handleStaffRemoveOrderItem = (index) => {
+    setStaffOrderItems(staffOrderItems.filter((_, idx) => idx !== index));
+  };
+
+  // Staff Order Submit (WhatsApp / Call / In-Person)
+  const handleStaffSubmitOrder = async () => {
+    const cleanPhone = (staffOrderPhone || '').replace(/\D/g, '').slice(-10);
+    if (cleanPhone.length !== 10) {
+      alert('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+    if (!staffOrderName.trim()) {
+      alert('Please enter the customer name.');
+      return;
+    }
+    if (staffOrderItems.length === 0) {
+      alert('Please add at least one laddu or savory item to the order.');
+      return;
+    }
+    if (staffOrderFulfillment === 'PORTER' && !staffOrderAddress.trim()) {
+      alert('Please provide the doorstep delivery address for Porter courier.');
+      return;
+    }
+
+    setIsStaffSubmittingOrder(true);
+    try {
+      const orderId = `TLS-WA-${Math.floor(10000 + Math.random() * 90000)}`;
+      const orderTotal = staffOrderItems.reduce((sum, item) => sum + (item.unitPrice * item.qty), 0);
+      const deliveryAddress = staffOrderFulfillment === 'PORTER'
+        ? staffOrderAddress.trim()
+        : '@15101, Tower-15, Prestige Tranquility, Budigere Cross, BLR - 560049';
+
+      const channelPrefix = staffOrderChannel === 'WHATSAPP'
+        ? 'STAFF_WHATSAPP'
+        : (staffOrderChannel === 'PHONE' ? 'STAFF_PHONE' : 'STAFF_COUNTER');
+
+      const fullChannel = staffOrderFulfillment === 'PORTER'
+        ? `${channelPrefix}_PORTER`
+        : channelPrefix;
+
+      const itemsSummaryString = staffOrderItems.map(it => `${it.qty}x ${it.name} (${it.cleanWeight || it.packLabel})`).join(', ');
+
+      const newOrder = {
+        orderId,
+        name: staffOrderName.trim(),
+        phone: cleanPhone,
+        address: deliveryAddress,
+        items: staffOrderItems,
+        itemsSummary: itemsSummaryString,
+        total: orderTotal,
+        paymentStatus: staffOrderPaymentStatus,
+        paymentMethod: staffOrderPaymentMethod,
+        channel: fullChannel,
+        fulfillmentType: staffOrderFulfillment,
+        isPorter: staffOrderFulfillment === 'PORTER',
+        status: 'RECEIVED',
+        notes: `[Staff Order via ${staffOrderChannel}] ${staffOrderNotes ? staffOrderNotes.trim() : ''}`.trim(),
+        date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+        time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+        timestamp: new Date().toISOString()
+      };
+
+      // 1. Auto-create / upsert customer in Supabase CRM
+      try {
+        await registerCustomerInSupabase({
+          phone: cleanPhone,
+          name: staffOrderName.trim(),
+          address: staffOrderAddress ? staffOrderAddress.trim() : ''
+        });
+      } catch (crmErr) {
+        console.warn('CRM upsert note:', crmErr);
+      }
+
+      // 2. Insert order into Supabase
+      try {
+        await insertOrderToSupabase(newOrder);
+      } catch (dbErr) {
+        console.warn('Supabase order insert note:', dbErr);
+      }
+
+      // 3. Update local orders state & cache
+      const updatedOrders = [newOrder, ...orders];
+      setOrders(updatedOrders);
+      try {
+        localStorage.setItem('tls_orders_db', JSON.stringify(updatedOrders));
+      } catch(e) {}
+
+      // 4. Construct WhatsApp confirmation message
+      const waText = `*Namaste ${staffOrderName.trim()}! 🙏*\n\n` +
+        `Your order *${orderId}* has been confirmed at *The Laddu Story* (Pure Cow Ghee & Jaggery Artisanal Kitchen).\n\n` +
+        `📦 *Items Ordered:*\n${staffOrderItems.map(it => `• ${it.qty}x ${it.name} (${it.cleanWeight}) - ₹${it.unitPrice * it.qty}`).join('\n')}\n\n` +
+        `💰 *Total Amount:* ₹${orderTotal.toLocaleString('en-IN')}\n` +
+        `💳 *Payment Status:* ${staffOrderPaymentStatus === 'PAID' ? `PAID (${staffOrderPaymentMethod}) ✅` : 'Pending on Pickup/Delivery ⏳'}\n` +
+        `🚚 *Fulfillment:* ${staffOrderFulfillment === 'PORTER' ? `Doorstep Delivery via Porter (Paid)\n📍 *Address:* ${deliveryAddress}` : 'Self-Pickup @ Prestige Tranquility, Budigere Cross'}\n\n` +
+        `Track your order live anytime: https://theladdustory.com\n` +
+        `Warm regards,\n*The Laddu Story Kitchen*`;
+
+      const waUrl = `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(waText)}`;
+
+      setStaffOrderCreatedSuccess({
+        orderId,
+        total: orderTotal,
+        phone: cleanPhone,
+        name: staffOrderName.trim(),
+        waUrl,
+        itemsCount: staffOrderItems.length
+      });
+
+      // Clear order form items
+      setStaffOrderItems([]);
+      setStaffOrderNotes('');
+    } catch (err) {
+      alert('Error creating staff order: ' + err.message);
+    } finally {
+      setIsStaffSubmittingOrder(false);
+    }
+  };
+
+  // Product Review & Rating Submission
+  const handleSubmitReview = async (e) => {
+    if (e) e.preventDefault();
+    if (!selectedProductForReview) return;
+    const authorName = reviewNameInput.trim() || (customerUser ? customerUser.name : 'Valued Patron');
+    const authorPhone = reviewPhoneInput.trim() || (customerUser ? customerUser.phone : '');
+
+    setIsSubmittingReview(true);
+    try {
+      const reviewObj = {
+        product_sku: selectedProductForReview.sku,
+        product_name: selectedProductForReview.name,
+        rating: reviewRatingInput,
+        customer_name: authorName,
+        customer_phone: authorPhone,
+        comment: reviewCommentInput.trim()
+      };
+
+      const result = await insertReviewToSupabase(reviewObj);
+      const savedReview = (result && result.review) ? result.review : {
+        ...reviewObj,
+        id: `rev-${Date.now()}`,
+        productSku: selectedProductForReview.sku,
+        productName: selectedProductForReview.name,
+        customerName: authorName,
+        customerPhone: authorPhone,
+        createdAt: new Date().toISOString()
+      };
+
+      const updated = [savedReview, ...reviews];
+      setReviews(updated);
+      try {
+        localStorage.setItem('tls_reviews_db', JSON.stringify(updated));
+      } catch(e) {}
+
+      setReviewSuccessMsg('Thank you for sharing your love for our pure cow ghee laddus! ⭐');
+      setTimeout(() => {
+        setReviewSuccessMsg('');
+        setSelectedProductForReview(null);
+        setReviewCommentInput('');
+        setReviewRatingInput(5);
+      }, 1800);
+    } catch (err) {
+      alert('Error saving review: ' + err.message);
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
+
   const updateCartQty = (cartKey, delta) => {
     setCart(cart.map(item => {
       if (item.cartKey === cartKey) {
@@ -1310,8 +1724,8 @@ export default function App() {
       alert('Please provide a valid 10-digit mobile number.');
       return;
     }
-    if (fulfillmentType === 'DELIVERY' && !custAddress.trim()) {
-      alert('Please provide your Doorstep Delivery Address.');
+    if ((fulfillmentType === 'DELIVERY' || fulfillmentType === 'PORTER') && !custAddress.trim()) {
+      alert('Please provide your complete Delivery Address for Doorstep Delivery.');
       return;
     }
 
@@ -1328,20 +1742,24 @@ export default function App() {
     const orderId = `TLS-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.floor(1000 + Math.random() * 9000)}`;
     const cleanPhone = custPhone.replace(/\D/g, '').slice(-10);
 
+    const isPorter = fulfillmentType === 'PORTER';
     const note = cleanPickupNote(custAddress);
     const pickupLoc = 'Self-Pickup: @15101, Tower-15, Prestige Tranquility, Budigere Cross, BLR - 560049; Contact - 9343207515';
-    const resolvedAddress = fulfillmentType === 'PICKUP'
-      ? (note ? `${pickupLoc} [Note: ${note}]` : pickupLoc)
-      : custAddress.trim();
+    const resolvedAddress = isPorter
+      ? `${custAddress.trim()} [DELIVERY VIA PORTER (PAID)]`
+      : (fulfillmentType === 'PICKUP'
+          ? (note ? `${pickupLoc} [Note: ${note}]` : pickupLoc)
+          : custAddress.trim());
 
     const newOrder = {
       orderId,
       time: new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' }) + ', ' + new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
-      channel: fulfillmentType === 'PICKUP' ? 'STORE_PICKUP' : 'ONLINE_STORE',
-      fulfillmentType,
+      channel: isPorter ? 'DOORSTEP_PORTER' : (fulfillmentType === 'PICKUP' ? 'STORE_PICKUP' : 'ONLINE_STORE'),
+      fulfillmentType: isPorter ? 'PORTER' : fulfillmentType,
       name: custName.trim(),
       phone: cleanPhone,
       address: resolvedAddress,
+      notes: isPorter ? `[PORTER DELIVERY (PAID)] Address: ${custAddress.trim()}` : (fulfillmentType === 'PICKUP' ? `[STORE PICKUP] Note: ${note}` : ''),
       items: cart.map(i => ({
         sku: i.sku,
         name: i.name,
@@ -1414,6 +1832,9 @@ export default function App() {
     e.preventDefault();
     if (adminPinInput === '1234' || adminPinInput === '8888') {
       setIsAdminLoggedIn(true);
+      try {
+        sessionStorage.setItem('tls_staff_logged_in', 'true');
+      } catch (e) {}
       setShowLoginModal(false);
       setAdminPinInput('');
       setActiveTab('admin');
@@ -1672,27 +2093,31 @@ export default function App() {
                 type="button"
                 id="select-doorstep-btn"
                 onClick={() => {
-                  setDeliveryNotice('⚠️ Doorstep Delivery is currently unavailable. Orders are exclusively available for Self-Pickup at @15101, Tower-15, Prestige Tranquility, Budigere Cross, BLR - 560049; Contact - 9343207515.');
-                  setFulfillmentType('PICKUP');
+                  setDeliveryNotice('⚠️ Direct Doorstep Delivery is currently unavailable. Orders are exclusively available for Self-Pickup at @15101, Tower-15, Prestige Tranquility, Budigere Cross, BLR - 560049; Contact - 9343207515.');
+                  setShowPorterOption(true);
+                  if (fulfillmentType !== 'PORTER') {
+                    setFulfillmentType('PICKUP');
+                  }
                 }}
                 style={{
                   padding: '10px 8px',
                   borderRadius: '8px',
-                  border: fulfillmentType === 'DELIVERY' ? '2px solid #4A121E' : '1px solid #CBD5E1',
-                  background: fulfillmentType === 'DELIVERY' ? '#E0F2FE' : '#fff',
-                  color: fulfillmentType === 'DELIVERY' ? '#4A121E' : '#64748B',
+                  border: (fulfillmentType === 'DELIVERY' || fulfillmentType === 'PORTER') ? '2px solid #1D4ED8' : '1px solid #CBD5E1',
+                  background: (fulfillmentType === 'DELIVERY' || fulfillmentType === 'PORTER') ? '#EFF6FF' : '#fff',
+                  color: (fulfillmentType === 'DELIVERY' || fulfillmentType === 'PORTER') ? '#1D4ED8' : '#64748B',
                   fontWeight: '800',
                   fontSize: '0.82rem',
                   cursor: 'pointer'
                 }}
               >
-                🛵 Doorstep Delivery
+                {fulfillmentType === 'PORTER' ? '🚚 Porter Service (Selected)' : '🛵 Doorstep Delivery'}
               </button>
               <button
                 type="button"
                 id="select-pickup-btn"
                 onClick={() => {
                   setDeliveryNotice('');
+                  setShowPorterOption(false);
                   setFulfillmentType('PICKUP');
                 }}
                 style={{
@@ -1706,7 +2131,7 @@ export default function App() {
                   cursor: 'pointer'
                 }}
               >
-                🛍️ Self-Pickup (Selected)
+                🛍️ Self-Pickup {fulfillmentType === 'PICKUP' ? '(Selected)' : ''}
               </button>
             </div>
 
@@ -1736,13 +2161,58 @@ export default function App() {
                 </button>
               </div>
             )}
+
+            {/* Porter Service Choice Option */}
+            {(showPorterOption || fulfillmentType === 'PORTER') && (
+              <div style={{
+                marginTop: '10px',
+                background: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
+                border: '1.5px solid #3B82F6',
+                borderRadius: '10px',
+                padding: '12px 14px',
+                boxShadow: '0 3px 10px rgba(59, 130, 246, 0.12)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '800', color: '#1E40AF', fontSize: '0.88rem', marginBottom: '4px' }}>
+                  <span>🚚</span>
+                  <span>Do you want Porter Service (Paid)?</span>
+                </div>
+                <div style={{ fontSize: '0.78rem', color: '#1E3A8A', lineHeight: 1.4, marginBottom: '10px' }}>
+                  We can book & dispatch your fresh laddus directly to your doorstep via Porter! Delivery fare is calculated by distance and payable directly to the Porter delivery partner on arrival or coordinated on dispatch.
+                </div>
+                <button
+                  type="button"
+                  id="opt-porter-service-btn"
+                  onClick={() => {
+                    setFulfillmentType('PORTER');
+                    setDeliveryNotice('');
+                  }}
+                  style={{
+                    width: '100%',
+                    background: fulfillmentType === 'PORTER' ? '#1D4ED8' : '#FFFFFF',
+                    color: fulfillmentType === 'PORTER' ? '#FFFFFF' : '#1D4ED8',
+                    border: '2px solid #1D4ED8',
+                    padding: '9px 12px',
+                    borderRadius: '8px',
+                    fontWeight: '800',
+                    fontSize: '0.82rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  {fulfillmentType === 'PORTER' ? '✓ Porter Service Selected (Paid Doorstep)' : '📦 Yes, Deliver via Porter Service (Paid)'}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Customer Inputs */}
           <div style={{ background: '#FAF6F0', padding: '14px', borderRadius: '12px', marginBottom: '16px', border: '1px solid #E2E8F0' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
               <span style={{ fontSize: '0.8rem', fontWeight: '800', color: '#475569' }}>
-                {fulfillmentType === 'PICKUP' ? 'CONTACT & PICKUP DETAILS' : 'CUSTOMER CONTACT & DELIVERY'}
+                {fulfillmentType === 'PICKUP' ? 'CONTACT & PICKUP DETAILS' : (fulfillmentType === 'PORTER' ? 'CONTACT & PORTER DELIVERY ADDRESS' : 'CUSTOMER CONTACT & DELIVERY')}
               </span>
               {customerUser && (
                 <span style={{ fontSize: '0.72rem', color: '#059669', fontWeight: '800' }}>
@@ -1780,7 +2250,7 @@ export default function App() {
             <textarea
               id="checkout-cust-address"
               rows={2}
-              placeholder={fulfillmentType === 'PICKUP' ? "Pickup Note / Expected Time (e.g. Pickup today 5 PM) [Optional]" : "Complete Delivery Address with Pincode *"}
+              placeholder={fulfillmentType === 'PICKUP' ? "Pickup Note / Expected Time (e.g. Pickup today 5 PM) [Optional]" : "Complete Delivery Address (Flat/House No, Tower/Street, Landmark & Pincode) *"}
               value={custAddress}
               onChange={e => setCustAddress(e.target.value)}
               style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
@@ -1793,9 +2263,9 @@ export default function App() {
               <span>Subtotal ({totalCartQty} items)</span>
               <span>₹{cartTotal.toLocaleString('en-IN')}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#059669', marginBottom: '8px', fontWeight: '600' }}>
-              <span>{fulfillmentType === 'PICKUP' ? 'Self-Pickup Collection' : 'Bangalore Express Delivery'}</span>
-              <span>FREE</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: fulfillmentType === 'PORTER' ? '#1D4ED8' : '#059669', marginBottom: '8px', fontWeight: '600' }}>
+              <span>{fulfillmentType === 'PORTER' ? 'Porter Doorstep Service' : (fulfillmentType === 'PICKUP' ? 'Self-Pickup Collection' : 'Bangalore Express Delivery')}</span>
+              <span>{fulfillmentType === 'PORTER' ? 'Charges On Delivery' : 'FREE'}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', fontWeight: '800', color: '#4A121E' }}>
               <span>Total Payable</span>
@@ -1968,14 +2438,14 @@ export default function App() {
               >
                 ⚙️ Staff OMS ({orders.length})
               </button>
-            ) : isStaffRoute ? (
+            ) : (
               <button
                 id="nav-staff-login-btn"
                 onClick={() => setShowLoginModal(true)}
                 style={{
-                  background: 'transparent',
+                  background: 'rgba(255,255,255,0.1)',
                   color: '#FDE68A',
-                  border: '1px dashed #FDE68A',
+                  border: '1px solid rgba(253, 230, 138, 0.4)',
                   padding: '8px 12px',
                   borderRadius: '8px',
                   fontSize: '0.82rem',
@@ -1985,7 +2455,7 @@ export default function App() {
               >
                 🔒 Staff Login
               </button>
-            ) : null}
+            )}
           </div>
 
         </div>
@@ -2125,13 +2595,60 @@ export default function App() {
 
                       {/* Details */}
                       <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', flex: 1 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
-                          <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '800', color: '#4A121E' }}>
+                        <div style={{ marginBottom: '6px' }}>
+                          <h4 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: '800', color: '#4A121E' }}>
                             {product.name}
                           </h4>
-                          <span style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: '700' }}>
-                            Min: {product.moq || '500g'}
-                          </span>
+                          
+                          {/* Rating & Reviews Interactive Trigger */}
+                          {(() => {
+                            const productReviews = reviews.filter(r => r.productSku === product.sku);
+                            const avgRating = productReviews.length > 0 
+                              ? (productReviews.reduce((sum, r) => sum + r.rating, 0) / productReviews.length).toFixed(1) 
+                              : '5.0';
+                            return (
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '2px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedProductForReview(product);
+                                    setReviewRatingInput(5);
+                                    setReviewCommentInput('');
+                                    setReviewSuccessMsg('');
+                                    if (customerUser) {
+                                      setReviewNameInput(customerUser.name || '');
+                                      setReviewPhoneInput(customerUser.phone || '');
+                                    } else if (custName) {
+                                      setReviewNameInput(custName);
+                                      setReviewPhoneInput(custPhone);
+                                    }
+                                  }}
+                                  style={{
+                                    background: '#FEF3C7',
+                                    border: '1px solid #FDE68A',
+                                    color: '#92400E',
+                                    borderRadius: '20px',
+                                    padding: '2px 8px',
+                                    fontSize: '0.72rem',
+                                    fontWeight: '800',
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
+                                  }}
+                                  title="View patron reviews & rate this product"
+                                >
+                                  <span>⭐ {avgRating}</span>
+                                  <span style={{ color: '#B45309', textDecoration: 'underline' }}>
+                                    ({productReviews.length} {productReviews.length === 1 ? 'review' : 'reviews'})
+                                  </span>
+                                </button>
+                                <span style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: '700' }}>
+                                  Min: {product.moq || '500g'}
+                                </span>
+                              </div>
+                            );
+                          })()}
                         </div>
                         <div style={{ fontSize: '0.78rem', color: '#64748B', marginBottom: '8px', flex: 1 }}>
                           {product.desc}
@@ -2426,12 +2943,26 @@ export default function App() {
                           <div style={{ fontSize: '0.85rem', color: '#475569', marginBottom: '10px' }}>
                             {o.items.map(it => `${it.qty}x ${it.name} (${it.cleanWeight || it.packLabel})`).join(', ')} • <b>₹{o.total}</b>
                           </div>
-                          <button
-                            onClick={() => reorderPastItems(o)}
-                            style={{ background: '#F1F5F9', border: '1px solid #CBD5E1', padding: '6px 14px', borderRadius: '6px', fontWeight: '700', fontSize: '0.8rem', color: '#4A121E', cursor: 'pointer' }}
-                          >
-                            🔄 Reorder in 1 Click
-                          </button>
+                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            <button
+                              onClick={() => reorderPastItems(o)}
+                              style={{ background: '#F1F5F9', border: '1px solid #CBD5E1', padding: '6px 14px', borderRadius: '6px', fontWeight: '700', fontSize: '0.8rem', color: '#4A121E', cursor: 'pointer' }}
+                            >
+                              🔄 Reorder in 1 Click
+                            </button>
+                            <button
+                              onClick={() => {
+                                const firstItem = o.items && o.items[0];
+                                const prod = firstItem 
+                                  ? (products.find(p => p.sku === firstItem.sku || p.name === firstItem.name) || { sku: firstItem.sku || 'general', name: firstItem.name })
+                                  : products[0];
+                                setSelectedProductForReview(prod);
+                              }}
+                              style={{ background: '#FFFBEB', border: '1px solid #FDE68A', padding: '6px 14px', borderRadius: '6px', fontWeight: '700', fontSize: '0.8rem', color: '#92400E', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                            >
+                              ⭐ Rate & Review Laddus
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -2698,21 +3229,54 @@ export default function App() {
           <div>
             {/* Staff Sub-Navigation */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '14px', background: '#fff', padding: '14px 20px', borderRadius: '16px', border: '1px solid #E2E8F0' }}>
-              <div style={{ display: 'flex', gap: '10px' }}>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                <button
+                  id="admin-btn-new-staff-order"
+                  onClick={() => {
+                    setStaffOrderPhone('');
+                    setStaffOrderName('');
+                    setStaffOrderAddress('');
+                    setStaffOrderNotes('');
+                    setStaffOrderItems([]);
+                    setStaffCustomerLookupStatus(null);
+                    setStaffOrderCreatedSuccess(null);
+                    setStaffSelectedProductSku(products[0]?.sku || '01');
+                    setStaffSelectedWeightKey('500g');
+                    setStaffSelectedQty(1);
+                    setShowStaffOrderModal(true);
+                  }}
+                  style={{
+                    background: '#059669',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '9px 16px',
+                    borderRadius: '8px',
+                    fontWeight: '800',
+                    fontSize: '0.88rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 2px 8px rgba(5, 150, 105, 0.25)'
+                  }}
+                  title="Create an order on behalf of customer from WhatsApp or phone call"
+                >
+                  <span>💬 + New WhatsApp / Staff Order</span>
+                </button>
                 <button
                   onClick={() => setAdminSection('orders')}
                   style={{
                     background: adminSection === 'orders' ? '#4A121E' : '#F1F5F9',
                     color: adminSection === 'orders' ? '#fff' : '#475569',
                     border: 'none',
-                    padding: '9px 18px',
+                    padding: '9px 16px',
                     borderRadius: '8px',
                     fontWeight: '800',
-                    fontSize: '0.9rem',
+                    fontSize: '0.88rem',
                     cursor: 'pointer'
                   }}
                 >
-                  📋 Orders & Kitchen Stream ({orders.length})
+                  📋 Orders & Kitchen ({orders.length})
                 </button>
                 <button
                   onClick={() => setAdminSection('inventory')}
@@ -2720,14 +3284,29 @@ export default function App() {
                     background: adminSection === 'inventory' ? '#4A121E' : '#F1F5F9',
                     color: adminSection === 'inventory' ? '#fff' : '#475569',
                     border: 'none',
-                    padding: '9px 18px',
+                    padding: '9px 16px',
                     borderRadius: '8px',
                     fontWeight: '800',
-                    fontSize: '0.9rem',
+                    fontSize: '0.88rem',
                     cursor: 'pointer'
                   }}
                 >
-                  📦 Inventory & Menu Catalog ({products.length})
+                  📦 Inventory Catalog ({products.length})
+                </button>
+                <button
+                  onClick={() => setAdminSection('reviews')}
+                  style={{
+                    background: adminSection === 'reviews' ? '#4A121E' : '#F1F5F9',
+                    color: adminSection === 'reviews' ? '#fff' : '#475569',
+                    border: 'none',
+                    padding: '9px 16px',
+                    borderRadius: '8px',
+                    fontWeight: '800',
+                    fontSize: '0.88rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  ⭐ Patron Reviews ({reviews.length})
                 </button>
               </div>
 
@@ -2775,8 +3354,76 @@ export default function App() {
             </div>
 
             {/* SUB-VIEW A: ORDERS & KITCHEN DISPATCH */}
-            {adminSection === 'orders' && (
-              <div>
+            {adminSection === 'orders' && (() => {
+              const pendingOrders = orders.filter(o => {
+                if (kitchenStatusFilter === 'RECEIVED_ONLY') return o.status === 'RECEIVED';
+                if (kitchenStatusFilter === 'PREPARING_ONLY') return o.status === 'PREPARING';
+                return o.status === 'RECEIVED' || o.status === 'PREPARING' || o.status === 'PACKED';
+              });
+
+              const itemMap = new Map();
+              let totalWeightGrams = 0;
+              let totalPacks = 0;
+
+              pendingOrders.forEach(o => {
+                (o.items || []).forEach(it => {
+                  const sku = it.sku || it.name || 'general';
+                  const qty = Number(it.qty) || 1;
+                  const pack = it.cleanWeight || it.packLabel || '500g';
+                  totalPacks += qty;
+
+                  const weightStr = pack.toLowerCase();
+                  let gramsPerUnit = 500;
+                  if (weightStr.includes('250g')) gramsPerUnit = 250;
+                  else if (weightStr.includes('1kg') || weightStr.includes('1 kg') || weightStr.includes('1000g')) gramsPerUnit = 1000;
+                  else if (weightStr.includes('500g')) gramsPerUnit = 500;
+                  else if (weightStr.includes('100g')) gramsPerUnit = 100;
+                  else if (weightStr.includes('200g')) gramsPerUnit = 200;
+                  else if (weightStr.includes('400g')) gramsPerUnit = 400;
+
+                  const itemWeightGrams = gramsPerUnit * qty;
+                  totalWeightGrams += itemWeightGrams;
+
+                  if (!itemMap.has(sku)) {
+                    itemMap.set(sku, {
+                      sku,
+                      name: it.name || 'Artisanal Laddu',
+                      image: it.image || 'images/TheLadduStory_Logo.jpg',
+                      totalQty: 0,
+                      totalWeightGrams: 0,
+                      packBreakdown: {},
+                      orders: []
+                    });
+                  }
+
+                  const record = itemMap.get(sku);
+                  record.totalQty += qty;
+                  record.totalWeightGrams += itemWeightGrams;
+                  record.packBreakdown[pack] = (record.packBreakdown[pack] || 0) + qty;
+                  record.orders.push({
+                    orderId: o.orderId,
+                    name: o.name,
+                    qty,
+                    pack
+                  });
+                });
+              });
+
+              const kitchenItems = Array.from(itemMap.values()).map(item => ({
+                ...item,
+                totalWeightKg: (item.totalWeightGrams / 1000).toFixed(2),
+                packBreakdown: item.packBreakdown || {}
+              })).sort((a, b) => b.totalWeightGrams - a.totalWeightGrams);
+
+              const kitchenSummary = {
+                totalOrdersCount: pendingOrders.length,
+                totalPacks,
+                totalWeightKg: (totalWeightGrams / 1000).toFixed(2),
+                items: kitchenItems
+              };
+
+              return (
+                <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
                   <div>
                     <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#4A121E', margin: 0 }}>
@@ -2787,172 +3434,532 @@ export default function App() {
                     </div>
                   </div>
 
-                  <input
-                    id="staff-search-input"
-                    type="text"
-                    placeholder="Search by Phone / Name / Order ID..."
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                    style={{ padding: '9px 14px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.88rem', width: '280px', fontWeight: '600' }}
-                  />
-                </div>
-
-                {/* Payment & Order Status Quick Filter Chips */}
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.78rem', fontWeight: '800', color: '#475569' }}>PAYMENT FILTER:</span>
-                  {[
-                    { id: 'ALL', label: 'All Payments', count: orders.length },
-                    { id: 'PAID', label: '🟢 Paid', count: orders.filter(o => o.paymentStatus === 'PAID').length },
-                    { id: 'PENDING', label: '🟠 Pending (Cash/Pickup)', count: orders.filter(o => o.paymentStatus !== 'PAID').length }
-                  ].map(pf => (
-                    <button
-                      key={pf.id}
-                      onClick={() => setPaymentFilter(pf.id)}
-                      style={{
-                        padding: '4px 10px',
-                        borderRadius: '16px',
-                        border: paymentFilter === pf.id ? '2px solid #059669' : '1px solid #CBD5E1',
-                        background: paymentFilter === pf.id ? '#ECFDF5' : '#fff',
-                        color: paymentFilter === pf.id ? '#065F46' : '#475569',
-                        fontWeight: '800',
-                        fontSize: '0.75rem',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {pf.label} ({pf.count})
-                    </button>
-                  ))}
-                </div>
-
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '18px', overflowX: 'auto', paddingBottom: '4px' }}>
-                  {['ALL', 'RECEIVED', 'PREPARING', 'PACKED', 'READY FOR PICKUP', 'ORDER PICKED UP', 'OUT FOR DELIVERY', 'DELIVERED'].map(st => {
-                    const count = st === 'ALL' ? orders.length : orders.filter(o => o.status === st).length;
-                    const isSelected = filterStatus === st;
-                    return (
+                  {/* View Mode Toggle: Orders List vs Kitchen Preparation View */}
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', background: '#F1F5F9', padding: '3px', borderRadius: '10px', border: '1px solid #CBD5E1' }}>
                       <button
-                        key={st}
-                        onClick={() => setFilterStatus(st)}
+                        type="button"
+                        id="view-mode-orders-list-btn"
+                        onClick={() => setAdminOrderViewMode('LIST')}
                         style={{
-                          padding: '6px 12px',
-                          borderRadius: '20px',
-                          border: isSelected ? '2px solid #4A121E' : '1px solid #CBD5E1',
-                          background: isSelected ? '#4A121E' : '#fff',
-                          color: isSelected ? '#fff' : '#475569',
-                          fontWeight: '700',
-                          fontSize: '0.78rem',
-                          cursor: 'pointer',
-                          whiteSpace: 'nowrap'
+                          background: adminOrderViewMode === 'LIST' ? '#4A121E' : 'transparent',
+                          color: adminOrderViewMode === 'LIST' ? '#fff' : '#475569',
+                          border: 'none',
+                          padding: '7px 14px',
+                          borderRadius: '8px',
+                          fontWeight: '800',
+                          fontSize: '0.82rem',
+                          cursor: 'pointer'
                         }}
                       >
-                        {st} ({count})
+                        📋 Orders List ({orders.length})
                       </button>
-                    );
-                  })}
+                      <button
+                        type="button"
+                        id="view-mode-kitchen-prep-btn"
+                        onClick={() => setAdminOrderViewMode('KITCHEN_PREP')}
+                        style={{
+                          background: adminOrderViewMode === 'KITCHEN_PREP' ? '#B45309' : 'transparent',
+                          color: adminOrderViewMode === 'KITCHEN_PREP' ? '#fff' : '#475569',
+                          border: 'none',
+                          padding: '7px 14px',
+                          borderRadius: '8px',
+                          fontWeight: '800',
+                          fontSize: '0.82rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                      >
+                        <span>🍳 Kitchen Prep Summary</span>
+                        <span style={{
+                          background: adminOrderViewMode === 'KITCHEN_PREP' ? '#FEF3C7' : '#E2E8F0',
+                          color: adminOrderViewMode === 'KITCHEN_PREP' ? '#92400E' : '#475569',
+                          padding: '1px 7px',
+                          borderRadius: '10px',
+                          fontSize: '0.72rem',
+                          fontWeight: '800'
+                        }}>
+                          {kitchenSummary.items.length} items
+                        </span>
+                      </button>
+                    </div>
+
+                    {adminOrderViewMode === 'LIST' && (
+                      <input
+                        id="staff-search-input"
+                        type="text"
+                        placeholder="Search by Phone / Name / Order ID..."
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        style={{ padding: '9px 14px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.88rem', width: '260px', fontWeight: '600' }}
+                      />
+                    )}
+                  </div>
                 </div>
 
-                {/* Orders Cards Grid */}
-                {filteredOrders.length === 0 ? (
-                  <div style={{ background: '#fff', borderRadius: '16px', padding: '40px', textAlign: 'center', border: '1px solid #E2E8F0', color: '#64748B' }}>
-                    <div style={{ fontSize: '2rem', marginBottom: '8px' }}>🔍</div>
-                    <div style={{ fontWeight: '700' }}>No orders found matching "{searchQuery}".</div>
-                    <div style={{ fontSize: '0.82rem', marginTop: '4px' }}>Try searching by phone number (e.g. 9343207515 or 9343207525), customer name, or order ID.</div>
-                  </div>
-                ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '18px' }}>
-                    {filteredOrders.map(o => (
-                      <div key={o.orderId} style={{ background: '#fff', borderRadius: '16px', border: '1px solid #E2E8F0', padding: '18px', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
-                        
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                          <span style={{ fontWeight: '800', color: '#4A121E', fontSize: '0.95rem' }}>{o.orderId}</span>
-                          <span style={{ fontSize: '0.75rem', color: '#64748B' }}>{o.time}</span>
-                        </div>
-
-                        <div style={{ marginBottom: '12px' }}>
-                          <div style={{ fontWeight: '800', fontSize: '1.05rem', color: '#1E293B' }}>{o.name}</div>
-                          <div style={{ fontSize: '0.85rem', color: '#831843', fontWeight: '700', marginTop: '2px' }}>
-                            📞 +91 {o.phone}
-                          </div>
-                          <div style={{ fontSize: '0.78rem', color: '#64748B', marginTop: '4px' }}>
-                            📍 {o.address}
-                          </div>
-                        </div>
-
-                        <div style={{ background: '#FAF6F0', padding: '10px 12px', borderRadius: '10px', marginBottom: '14px', border: '1px solid #F1F5F9' }}>
-                          {o.items.map((it, idx) => (
-                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem', marginBottom: '4px' }}>
-                              <span>{it.qty}x {it.name} ({it.cleanWeight || it.packLabel})</span>
-                              <b>₹{it.unitPrice * it.qty}</b>
-                            </div>
-                          ))}
-                          <div style={{ borderTop: '1px dashed #CBD5E1', marginTop: '6px', paddingTop: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: '800', fontSize: '0.92rem', color: '#4A121E' }}>
-                            <span>Total: ₹{o.total}</span>
-                            <span style={{ 
-                              fontSize: '0.74rem', 
-                              padding: '3px 8px', 
-                              borderRadius: '6px', 
-                              background: o.paymentStatus === 'PAID' ? '#DEF7EC' : '#FEF3C7', 
-                              color: o.paymentStatus === 'PAID' ? '#03543F' : '#92400E' 
-                            }}>
-                              {o.paymentStatus === 'PAID' ? `🟢 PAID (${o.paymentMethod || 'UPI'})` : '🟠 PAY ON PICKUP'}
-                            </span>
-                          </div>
-                        </div>
-
-                        {o.paymentStatus !== 'PAID' && (
-                          <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', padding: '8px 10px', borderRadius: '8px', marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
-                            <span style={{ fontSize: '0.76rem', fontWeight: '800', color: '#92400E' }}>
-                              Staff Payment:
-                            </span>
-                            <div style={{ display: 'flex', gap: '4px' }}>
-                              <button
-                                onClick={() => handleStaffMarkPayment(o.orderId, 'CASH')}
-                                style={{ background: '#059669', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: '800', cursor: 'pointer' }}
-                                title="Customer paid cash at store"
-                              >
-                                💵 Cash Paid
-                              </button>
-                              <button
-                                onClick={() => handleStaffMarkPayment(o.orderId, 'UPI')}
-                                style={{ background: '#1E40AF', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: '800', cursor: 'pointer' }}
-                                title="Customer paid via UPI"
-                              >
-                                📱 UPI Paid
-                              </button>
-                            </div>
-                          </div>
-                        )}
-
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                          <span style={{ fontSize: '0.75rem', fontWeight: '800', color: '#64748B' }}>STATUS:</span>
-                          <select
-                            value={o.status}
-                            onChange={e => updateOrderStatus(o.orderId, e.target.value)}
-                            style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.82rem', fontWeight: '800', background: '#F1F5F9', color: '#4A121E', cursor: 'pointer' }}
-                          >
-                            <option value="RECEIVED">RECEIVED</option>
-                            <option value="PREPARING">PREPARING</option>
-                            <option value="PACKED">PACKED</option>
-                            {(o.fulfillmentType === 'PICKUP' || (o.channel && o.channel.includes('PICKUP'))) ? (
-                              <>
-                                <option value="READY FOR PICKUP">READY FOR PICKUP</option>
-                                <option value="ORDER PICKED UP">ORDER PICKED UP</option>
-                              </>
-                            ) : (
-                              <>
-                                <option value="OUT FOR DELIVERY">OUT FOR DELIVERY</option>
-                                <option value="DELIVERED">DELIVERED</option>
-                              </>
-                            )}
-                            <option value="CANCELLED">CANCELLED</option>
-                          </select>
-                        </div>
-
+                {/* ------------------------------------------------------------- */}
+                {/* VIEW MODE 1: KITCHEN PREPARATION BATCH SUMMARY VIEW           */}
+                {/* ------------------------------------------------------------- */}
+                {adminOrderViewMode === 'KITCHEN_PREP' && (
+                  <div>
+                    {/* KPI Metric Cards */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginBottom: '20px' }}>
+                      <div style={{ background: '#FFFBEB', border: '1.5px solid #FDE68A', borderRadius: '14px', padding: '16px', boxShadow: '0 2px 8px rgba(180, 83, 9, 0.06)' }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: '800', color: '#92400E', textTransform: 'uppercase' }}>Orders In Queue</div>
+                        <div style={{ fontSize: '1.8rem', fontWeight: '800', color: '#78350F', margin: '4px 0' }}>{kitchenSummary.totalOrdersCount}</div>
+                        <div style={{ fontSize: '0.74rem', color: '#B45309' }}>Awaiting preparation & packing</div>
                       </div>
-                    ))}
+                      <div style={{ background: '#ECFDF5', border: '1.5px solid #A7F3D0', borderRadius: '14px', padding: '16px', boxShadow: '0 2px 8px rgba(5, 150, 105, 0.06)' }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: '800', color: '#065F46', textTransform: 'uppercase' }}>Total Fresh Laddu Weight</div>
+                        <div style={{ fontSize: '1.8rem', fontWeight: '800', color: '#047857', margin: '4px 0' }}>{kitchenSummary.totalWeightKg} <span style={{ fontSize: '1rem' }}>Kg</span></div>
+                        <div style={{ fontSize: '0.74rem', color: '#059669' }}>Total Cow Ghee batch volume to cook</div>
+                      </div>
+                      <div style={{ background: '#EFF6FF', border: '1.5px solid #BFDBFE', borderRadius: '14px', padding: '16px', boxShadow: '0 2px 8px rgba(37, 99, 235, 0.06)' }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: '800', color: '#1E40AF', textTransform: 'uppercase' }}>Total Boxes / Packets</div>
+                        <div style={{ fontSize: '1.8rem', fontWeight: '800', color: '#1D4ED8', margin: '4px 0' }}>{kitchenSummary.totalPacks} <span style={{ fontSize: '1rem' }}>Packs</span></div>
+                        <div style={{ fontSize: '0.74rem', color: '#2563EB' }}>To be boxed & labeled</div>
+                      </div>
+                      <div style={{ background: '#FAF5FF', border: '1.5px solid #E9D5FF', borderRadius: '14px', padding: '16px', boxShadow: '0 2px 8px rgba(107, 33, 168, 0.06)' }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: '800', color: '#6B21A8', textTransform: 'uppercase' }}>Varieties in Queue</div>
+                        <div style={{ fontSize: '1.8rem', fontWeight: '800', color: '#581C87', margin: '4px 0' }}>{kitchenSummary.items.length}</div>
+                        <div style={{ fontSize: '0.74rem', color: '#7E22CE' }}>Distinct recipe preparations</div>
+                      </div>
+                    </div>
+
+                    {/* Controls & Filter Bar */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px', background: '#FAF6F0', padding: '12px 16px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '0.78rem', fontWeight: '800', color: '#475569' }}>QUEUE FILTER:</span>
+                        {[
+                          { id: 'PENDING', label: 'All Pending (Received + Preparing + Packed)' },
+                          { id: 'RECEIVED_ONLY', label: '🟡 Received (To Cook)' },
+                          { id: 'PREPARING_ONLY', label: '⏳ Preparing Now' }
+                        ].map(qf => (
+                          <button
+                            key={qf.id}
+                            onClick={() => setKitchenStatusFilter(qf.id)}
+                            style={{
+                              padding: '5px 12px',
+                              borderRadius: '16px',
+                              border: kitchenStatusFilter === qf.id ? '2px solid #B45309' : '1px solid #CBD5E1',
+                              background: kitchenStatusFilter === qf.id ? '#FFFBEB' : '#fff',
+                              color: kitchenStatusFilter === qf.id ? '#92400E' : '#475569',
+                              fontWeight: '800',
+                              fontSize: '0.75rem',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {qf.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <button
+                        onClick={() => window.print()}
+                        style={{ background: '#4A121E', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '8px', fontWeight: '800', fontSize: '0.82rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                      >
+                        🖨️ Print Kitchen Preparation Slip
+                      </button>
+                    </div>
+
+                    {/* Aggregated Items Grid */}
+                    {kitchenSummary.items.length === 0 ? (
+                      <div style={{ background: '#fff', borderRadius: '16px', padding: '48px', textAlign: 'center', border: '1px solid #E2E8F0', color: '#64748B' }}>
+                        <div style={{ fontSize: '3rem', marginBottom: '12px' }}>🍳</div>
+                        <h3 style={{ margin: '0 0 6px', color: '#4A121E' }}>No Pending Orders to Cook!</h3>
+                        <p style={{ margin: 0, fontSize: '0.88rem' }}>All orders have been prepared and fulfilled. Fresh orders will appear here automatically.</p>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '18px' }}>
+                        {kitchenSummary.items.map(item => (
+                          <div key={item.sku} style={{ background: '#fff', borderRadius: '16px', border: '1.5px solid #E2E8F0', padding: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column' }}>
+                            <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start', marginBottom: '14px' }}>
+                              <div style={{ width: '64px', height: '64px', borderRadius: '12px', background: '#FFF8F0', overflow: 'hidden', border: '1px solid #F1F5F9', flexShrink: 0 }}>
+                                <img src={item.image} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.src = 'images/TheLadduStory_Logo.jpg'; }} />
+                              </div>
+                              <div style={{ flex: 1 }}>
+                                <h4 style={{ margin: '0 0 4px', fontSize: '1.1rem', fontWeight: '800', color: '#4A121E' }}>{item.name}</h4>
+                                <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#831843' }}>SKU: {item.sku}</div>
+                                <div style={{ marginTop: '6px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                  <span style={{ background: '#FEF3C7', color: '#92400E', padding: '3px 10px', borderRadius: '12px', fontSize: '0.85rem', fontWeight: '800' }}>
+                                    Total: {item.totalWeightKg} Kg
+                                  </span>
+                                  <span style={{ background: '#EFF6FF', color: '#1E40AF', padding: '3px 10px', borderRadius: '12px', fontSize: '0.85rem', fontWeight: '800' }}>
+                                    {item.totalQty} Boxes
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Pack Sizes Breakdown */}
+                            <div style={{ background: '#FAF6F0', borderRadius: '10px', padding: '10px 14px', marginBottom: '14px', border: '1px solid #F1F5F9' }}>
+                              <div style={{ fontSize: '0.74rem', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', marginBottom: '6px' }}>Pack Size Breakdown:</div>
+                              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {Object.entries(item.packBreakdown).map(([pack, count]) => (
+                                  <span key={pack} style={{ background: '#FFFFFF', border: '1px solid #CBD5E1', padding: '4px 10px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: '800', color: '#1E293B' }}>
+                                    {pack}: <b>{count} {count === 1 ? 'pack' : 'packs'}</b>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Orders Queue for this Item */}
+                            <div style={{ borderTop: '1px dashed #CBD5E1', paddingTop: '10px', flex: 1 }}>
+                              <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', marginBottom: '6px' }}>For Orders:</div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', maxHeight: '140px', overflowY: 'auto' }}>
+                                {item.orders.map((ord, i) => (
+                                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem', background: '#F8FAFC', padding: '5px 8px', borderRadius: '6px' }}>
+                                    <span style={{ fontWeight: '700', color: '#4A121E' }}>{ord.orderId} • {ord.name}</span>
+                                    <span style={{ fontWeight: '800', color: '#0369A1' }}>{ord.qty}x ({ord.pack})</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ------------------------------------------------------------- */}
+                {/* VIEW MODE 2: INDIVIDUAL ORDERS STREAM & DISPATCH              */}
+                {/* ------------------------------------------------------------- */}
+                {adminOrderViewMode === 'LIST' && (
+                  <div>
+                    {/* Payment & Order Status Quick Filter Chips */}
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.78rem', fontWeight: '800', color: '#475569' }}>PAYMENT FILTER:</span>
+                      {[
+                        { id: 'ALL', label: 'All Payments', count: orders.length },
+                        { id: 'PAID', label: '🟢 Paid', count: orders.filter(o => o.paymentStatus === 'PAID').length },
+                        { id: 'PENDING', label: '🟠 Pending (Cash/Pickup)', count: orders.filter(o => o.paymentStatus !== 'PAID').length }
+                      ].map(pf => (
+                        <button
+                          key={pf.id}
+                          onClick={() => setPaymentFilter(pf.id)}
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: '16px',
+                            border: paymentFilter === pf.id ? '2px solid #059669' : '1px solid #CBD5E1',
+                            background: paymentFilter === pf.id ? '#ECFDF5' : '#fff',
+                            color: paymentFilter === pf.id ? '#065F46' : '#475569',
+                            fontWeight: '800',
+                            fontSize: '0.75rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {pf.label} ({pf.count})
+                        </button>
+                      ))}
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '18px', overflowX: 'auto', paddingBottom: '4px' }}>
+                      {['ALL', 'RECEIVED', 'PREPARING', 'PACKED', 'READY FOR PICKUP', 'ORDER PICKED UP', 'OUT FOR DELIVERY', 'DELIVERED'].map(st => {
+                        const count = st === 'ALL' ? orders.length : orders.filter(o => o.status === st).length;
+                        const isSelected = filterStatus === st;
+                        return (
+                          <button
+                            key={st}
+                            onClick={() => setFilterStatus(st)}
+                            style={{
+                              padding: '6px 12px',
+                              borderRadius: '20px',
+                              border: isSelected ? '2px solid #4A121E' : '1px solid #CBD5E1',
+                              background: isSelected ? '#4A121E' : '#fff',
+                              color: isSelected ? '#fff' : '#475569',
+                              fontWeight: '700',
+                              fontSize: '0.78rem',
+                              cursor: 'pointer',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            {st} ({count})
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Orders Cards Grid */}
+                    {filteredOrders.length === 0 ? (
+                      <div style={{ background: '#fff', borderRadius: '16px', padding: '40px', textAlign: 'center', border: '1px solid #E2E8F0', color: '#64748B' }}>
+                        <div style={{ fontSize: '2rem', marginBottom: '8px' }}>🔍</div>
+                        <div style={{ fontWeight: '700' }}>No orders found matching "{searchQuery}".</div>
+                        <div style={{ fontSize: '0.82rem', marginTop: '4px' }}>Try searching by phone number (e.g. 9343207515 or 9343207525), customer name, or order ID.</div>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '18px' }}>
+                        {filteredOrders.map(o => {
+                          const isOrderPorter = o.fulfillmentType === 'PORTER' || (o.channel && o.channel.includes('PORTER')) || (o.notes && o.notes.includes('PORTER'));
+                          const isOrderPickup = o.fulfillmentType === 'PICKUP' || (o.channel && o.channel.includes('PICKUP'));
+                          const isWhatsApp = o.channel === 'WHATSAPP' || (o.channel && o.channel.includes('WHATSAPP'));
+
+                          return (
+                            <div key={o.orderId} style={{ background: '#fff', borderRadius: '16px', border: '1px solid #E2E8F0', padding: '18px', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
+                              
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                <span style={{ fontWeight: '800', color: '#4A121E', fontSize: '0.95rem' }}>{o.orderId}</span>
+                                <span style={{ fontSize: '0.75rem', color: '#64748B' }}>{o.time}</span>
+                              </div>
+
+                              {/* Order Channel & Fulfillment Badges */}
+                              <div style={{ display: 'flex', gap: '6px', marginBottom: '10px', flexWrap: 'wrap' }}>
+                                {isOrderPorter ? (
+                                  <span style={{ background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', padding: '2px 8px', borderRadius: '12px', fontSize: '0.72rem', fontWeight: '800' }}>
+                                    🚚 PORTER DELIVERY (PAID)
+                                  </span>
+                                ) : (isOrderPickup ? (
+                                  <span style={{ background: '#ECFDF5', color: '#065F46', border: '1px solid #A7F3D0', padding: '2px 8px', borderRadius: '12px', fontSize: '0.72rem', fontWeight: '800' }}>
+                                    🛍️ SELF-PICKUP
+                                  </span>
+                                ) : (
+                                  <span style={{ background: '#F1F5F9', color: '#475569', border: '1px solid #CBD5E1', padding: '2px 8px', borderRadius: '12px', fontSize: '0.72rem', fontWeight: '800' }}>
+                                    🛵 DOORSTEP DELIVERY
+                                  </span>
+                                ))}
+
+                                {isWhatsApp && (
+                                  <span style={{ background: '#DCFCE7', color: '#15803D', border: '1px solid #86EFAC', padding: '2px 8px', borderRadius: '12px', fontSize: '0.72rem', fontWeight: '800' }}>
+                                    💬 WhatsApp Order
+                                  </span>
+                                )}
+                              </div>
+
+                              <div style={{ marginBottom: '12px' }}>
+                                <div style={{ fontWeight: '800', fontSize: '1.05rem', color: '#1E293B' }}>{o.name}</div>
+                                <div style={{ fontSize: '0.85rem', color: '#831843', fontWeight: '700', marginTop: '2px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <span>📞 +91 {o.phone}</span>
+                                  <a
+                                    href={`https://wa.me/91${o.phone.replace(/\D/g,'').slice(-10)}?text=${encodeURIComponent(`Namaste ${o.name}! Checking in regarding your Laddu Story order ${o.orderId}.`)}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    style={{ color: '#16A34A', fontSize: '0.75rem', fontWeight: '800', textDecoration: 'none' }}
+                                  >
+                                    💬 Chat on WhatsApp
+                                  </a>
+                                </div>
+                                <div style={{ fontSize: '0.78rem', color: '#64748B', marginTop: '4px' }}>
+                                  📍 {o.address}
+                                </div>
+                              </div>
+
+                              <div style={{ background: '#FAF6F0', padding: '10px 12px', borderRadius: '10px', marginBottom: '14px', border: '1px solid #F1F5F9' }}>
+                                {o.items.map((it, idx) => (
+                                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem', marginBottom: '4px' }}>
+                                    <span>{it.qty}x {it.name} ({it.cleanWeight || it.packLabel})</span>
+                                    <b>₹{it.unitPrice * it.qty}</b>
+                                  </div>
+                                ))}
+                                <div style={{ borderTop: '1px dashed #CBD5E1', marginTop: '6px', paddingTop: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: '800', fontSize: '0.92rem', color: '#4A121E' }}>
+                                  <span>Total: ₹{o.total}</span>
+                                  <span style={{ 
+                                    fontSize: '0.74rem', 
+                                    padding: '3px 8px', 
+                                    borderRadius: '6px', 
+                                    background: o.paymentStatus === 'PAID' ? '#DEF7EC' : '#FEF3C7', 
+                                    color: o.paymentStatus === 'PAID' ? '#03543F' : '#92400E' 
+                                  }}>
+                                    {o.paymentStatus === 'PAID' ? `🟢 PAID (${o.paymentMethod || 'UPI'})` : '🟠 PAY ON PICKUP/DELIVERY'}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Porter Service Coordination Section */}
+                              {(isOrderPorter || editingPorterOrderId === o.orderId) && (
+                                <div style={{ background: '#EFF6FF', border: '1.5px solid #93C5FD', borderRadius: '10px', padding: '10px 12px', marginBottom: '12px' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                    <span style={{ fontWeight: '800', color: '#1E40AF', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      🚚 Porter Coordination:
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (editingPorterOrderId === o.orderId) {
+                                          setEditingPorterOrderId(null);
+                                        } else {
+                                          const curr = getPorterDetails(o.notes) || {};
+                                          setPorterForm({
+                                            status: curr.status || 'Requested',
+                                            bookingId: curr.booking || '',
+                                            driverName: curr.driver || '',
+                                            driverPhone: curr.phone || '',
+                                            fare: curr.fare || '',
+                                            trackingUrl: curr.track || ''
+                                          });
+                                          setEditingPorterOrderId(o.orderId);
+                                        }
+                                      }}
+                                      style={{ background: 'transparent', border: 'none', color: '#1D4ED8', fontSize: '0.74rem', fontWeight: '800', cursor: 'pointer', textDecoration: 'underline' }}
+                                    >
+                                      {editingPorterOrderId === o.orderId ? 'Cancel' : '✏️ Edit Porter Details'}
+                                    </button>
+                                  </div>
+
+                                  {editingPorterOrderId === o.orderId ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                                        <div>
+                                          <label style={{ fontSize: '0.7rem', fontWeight: '800', color: '#1E3A8A' }}>Porter Status</label>
+                                          <select
+                                            value={porterForm.status}
+                                            onChange={e => setPorterForm({ ...porterForm, status: e.target.value })}
+                                            style={{ width: '100%', padding: '5px 8px', borderRadius: '6px', border: '1px solid #93C5FD', fontSize: '0.75rem', fontWeight: '700' }}
+                                          >
+                                            <option value="Requested">Requested</option>
+                                            <option value="Driver Assigned">Driver Assigned</option>
+                                            <option value="Picked Up / Out for Delivery">Picked Up / Out for Delivery</option>
+                                            <option value="Delivered">Delivered</option>
+                                          </select>
+                                        </div>
+                                        <div>
+                                          <label style={{ fontSize: '0.7rem', fontWeight: '800', color: '#1E3A8A' }}>Fare (₹)</label>
+                                          <input
+                                            type="text"
+                                            placeholder="e.g. 150"
+                                            value={porterForm.fare}
+                                            onChange={e => setPorterForm({ ...porterForm, fare: e.target.value })}
+                                            style={{ width: '100%', boxSizing: 'border-box', padding: '5px 8px', borderRadius: '6px', border: '1px solid #93C5FD', fontSize: '0.75rem' }}
+                                          />
+                                        </div>
+                                      </div>
+                                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                                        <input
+                                          type="text"
+                                          placeholder="Driver Name (e.g. Ramesh)"
+                                          value={porterForm.driverName}
+                                          onChange={e => setPorterForm({ ...porterForm, driverName: e.target.value })}
+                                          style={{ width: '100%', boxSizing: 'border-box', padding: '5px 8px', borderRadius: '6px', border: '1px solid #93C5FD', fontSize: '0.75rem' }}
+                                        />
+                                        <input
+                                          type="tel"
+                                          placeholder="Driver Mobile"
+                                          value={porterForm.driverPhone}
+                                          onChange={e => setPorterForm({ ...porterForm, driverPhone: e.target.value })}
+                                          style={{ width: '100%', boxSizing: 'border-box', padding: '5px 8px', borderRadius: '6px', border: '1px solid #93C5FD', fontSize: '0.75rem' }}
+                                        />
+                                      </div>
+                                      <input
+                                        type="text"
+                                        placeholder="Porter CRN / Booking ID (e.g. CRN-9841)"
+                                        value={porterForm.bookingId}
+                                        onChange={e => setPorterForm({ ...porterForm, bookingId: e.target.value })}
+                                        style={{ width: '100%', boxSizing: 'border-box', padding: '5px 8px', borderRadius: '6px', border: '1px solid #93C5FD', fontSize: '0.75rem' }}
+                                      />
+                                      <button
+                                        type="button"
+                                        disabled={isSavingPorter}
+                                        onClick={async () => {
+                                          setIsSavingPorter(true);
+                                          try {
+                                            const res = await updateOrderPorterDetailsInSupabase(o.orderId, {
+                                              porterStatus: porterForm.status,
+                                              bookingId: porterForm.bookingId,
+                                              driverName: porterForm.driverName,
+                                              driverPhone: porterForm.driverPhone,
+                                              fare: porterForm.fare,
+                                              trackingUrl: porterForm.trackingUrl
+                                            });
+                                            if (res && res.notes) {
+                                              setOrders(prev => prev.map(item => item.orderId === o.orderId ? { ...item, notes: res.notes } : item));
+                                            }
+                                            setEditingPorterOrderId(null);
+                                            alert('✓ Porter details saved and synced successfully!');
+                                          } catch(err) {
+                                            alert('Error saving Porter details: ' + err.message);
+                                          } finally {
+                                            setIsSavingPorter(false);
+                                          }
+                                        }}
+                                        style={{ background: '#1D4ED8', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '800', cursor: isSavingPorter ? 'not-allowed' : 'pointer', marginTop: '2px' }}
+                                      >
+                                        {isSavingPorter ? 'Saving...' : '💾 Save Porter Update'}
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div>
+                                      {(() => {
+                                        const porter = getPorterDetails(o.notes);
+                                        if (!porter || (!porter.driver && !porter.fare && !porter.booking && !porter.status)) {
+                                          return (
+                                            <div style={{ fontSize: '0.75rem', color: '#64748B' }}>
+                                              Porter requested by patron. Click "Edit Porter Details" to record driver & fare.
+                                            </div>
+                                          );
+                                        }
+                                        return (
+                                          <div style={{ fontSize: '0.76rem', color: '#1E3A8A', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                            <div><b>Status:</b> {porter.status || 'Requested'} {porter.fare ? `• <b>Fare:</b> ₹${porter.fare}` : ''}</div>
+                                            {porter.driver && <div><b>Driver:</b> {porter.driver} {porter.phone ? `(${porter.phone})` : ''}</div>}
+                                            {porter.booking && <div><b>Booking Ref:</b> {porter.booking}</div>}
+                                          </div>
+                                        );
+                                      })()}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {o.paymentStatus !== 'PAID' && (
+                                <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', padding: '8px 10px', borderRadius: '8px', marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                                  <span style={{ fontSize: '0.76rem', fontWeight: '800', color: '#92400E' }}>
+                                    Staff Payment:
+                                  </span>
+                                  <div style={{ display: 'flex', gap: '4px' }}>
+                                    <button
+                                      onClick={() => handleStaffMarkPayment(o.orderId, 'CASH')}
+                                      style={{ background: '#059669', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: '800', cursor: 'pointer' }}
+                                      title="Customer paid cash at store"
+                                    >
+                                      💵 Cash Paid
+                                    </button>
+                                    <button
+                                      onClick={() => handleStaffMarkPayment(o.orderId, 'UPI')}
+                                      style={{ background: '#1E40AF', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: '800', cursor: 'pointer' }}
+                                      title="Customer paid via UPI"
+                                    >
+                                      📱 UPI Paid
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                                <span style={{ fontSize: '0.75rem', fontWeight: '800', color: '#64748B' }}>STATUS:</span>
+                                <select
+                                  value={o.status}
+                                  onChange={e => updateOrderStatus(o.orderId, e.target.value)}
+                                  style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '0.82rem', fontWeight: '800', background: '#F1F5F9', color: '#4A121E', cursor: 'pointer' }}
+                                >
+                                  <option value="RECEIVED">RECEIVED</option>
+                                  <option value="PREPARING">PREPARING</option>
+                                  <option value="PACKED">PACKED</option>
+                                  {isOrderPickup ? (
+                                    <>
+                                      <option value="READY FOR PICKUP">READY FOR PICKUP</option>
+                                      <option value="ORDER PICKED UP">ORDER PICKED UP</option>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <option value="OUT FOR DELIVERY">OUT FOR DELIVERY</option>
+                                      <option value="DELIVERED">DELIVERED</option>
+                                    </>
+                                  )}
+                                  <option value="CANCELLED">CANCELLED</option>
+                                </select>
+                              </div>
+
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            )}
+              );
+            })()}
 
             {/* SUB-VIEW B: INVENTORY & MENU CATALOG MANAGER */}
             {adminSection === 'inventory' && (
@@ -3098,6 +4105,203 @@ export default function App() {
 
               </div>
             )}
+
+            {/* SUB-VIEW C: PATRON REVIEWS & RATINGS ANALYTICS */}
+            {adminSection === 'reviews' && (() => {
+              const totalReviews = reviews.length;
+              const avgRating = totalReviews > 0 
+                ? (reviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0) / totalReviews).toFixed(1) 
+                : '5.0';
+              const fiveStarCount = reviews.filter(r => (Number(r.rating) || 5) === 5).length;
+              const fiveStarPct = totalReviews > 0 ? Math.round((fiveStarCount / totalReviews) * 100) : 100;
+
+              const filteredReviews = reviews.filter(r => {
+                const sku = r.productSku || r.product_sku;
+                const matchProd = reviewProductFilter === 'ALL' || sku === reviewProductFilter;
+                const matchRating = reviewRatingFilter === 'ALL' || String(r.rating) === String(reviewRatingFilter);
+                return matchProd && matchRating;
+              });
+
+              return (
+                <div>
+                  {/* Header & New Review Trigger */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+                    <div>
+                      <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#4A121E', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        ⭐ Patron Reviews & Tasting Notes
+                      </h2>
+                      <div style={{ fontSize: '0.82rem', color: '#64748B' }}>
+                        Authentic patron ratings, aroma feedback & cow ghee reviews synced with Supabase DB.
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setSelectedProductForReview(products[0]);
+                        setReviewRatingInput(5);
+                        setReviewNameInput('');
+                        setReviewPhoneInput('');
+                        setReviewCommentInput('');
+                      }}
+                      style={{
+                        background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                        color: '#fff',
+                        border: 'none',
+                        padding: '10px 18px',
+                        borderRadius: '8px',
+                        fontWeight: '800',
+                        fontSize: '0.88rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        boxShadow: '0 2px 8px rgba(5, 150, 105, 0.25)'
+                      }}
+                    >
+                      + Enter Review on Behalf of Patron
+                    </button>
+                  </div>
+
+                  {/* Analytics KPI Summary Cards */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '14px', marginBottom: '22px' }}>
+                    <div style={{ background: '#FFFBEB', borderRadius: '14px', padding: '16px', border: '1.5px solid #FDE68A' }}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: '800', color: '#92400E', textTransform: 'uppercase' }}>Average Store Rating</div>
+                      <div style={{ fontSize: '1.8rem', fontWeight: '900', color: '#78350F', marginTop: '4px' }}>
+                        ⭐ {avgRating} <span style={{ fontSize: '1rem', fontWeight: '700', color: '#B45309' }}>/ 5.0</span>
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#92400E', marginTop: '4px' }}>
+                        Across {totalReviews} verified patron reviews
+                      </div>
+                    </div>
+
+                    <div style={{ background: '#ECFDF5', borderRadius: '14px', padding: '16px', border: '1.5px solid #A7F3D0' }}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: '800', color: '#065F46', textTransform: 'uppercase' }}>5-Star Satisfaction</div>
+                      <div style={{ fontSize: '1.8rem', fontWeight: '900', color: '#064E3B', marginTop: '4px' }}>
+                        💯 {fiveStarPct}%
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#047857', marginTop: '4px' }}>
+                        {fiveStarCount} out of {totalReviews} reviews rated top 5★
+                      </div>
+                    </div>
+
+                    <div style={{ background: '#EFF6FF', borderRadius: '14px', padding: '16px', border: '1.5px solid #BFDBFE' }}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: '800', color: '#1E40AF', textTransform: 'uppercase' }}>Total Testimonials</div>
+                      <div style={{ fontSize: '1.8rem', fontWeight: '900', color: '#1E3A8A', marginTop: '4px' }}>
+                        📝 {totalReviews}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#2563EB', marginTop: '4px' }}>
+                        Live in Supabase & Local Cache
+                      </div>
+                    </div>
+
+                    <div style={{ background: '#FAF6F0', borderRadius: '14px', padding: '16px', border: '1.5px solid #E2E8F0' }}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: '800', color: '#4A121E', textTransform: 'uppercase' }}>Quality Standard</div>
+                      <div style={{ fontSize: '1.1rem', fontWeight: '800', color: '#4A121E', marginTop: '8px' }}>
+                        Pure Cow Ghee & Jaggery
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '4px' }}>
+                        Zero white sugar • 100% artisanal
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Filter & Search Bar */}
+                  <div style={{ background: '#fff', padding: '14px 18px', borderRadius: '14px', border: '1px solid #E2E8F0', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <div>
+                        <label style={{ fontSize: '0.72rem', fontWeight: '800', color: '#64748B', display: 'block', marginBottom: '2px' }}>Filter by Product</label>
+                        <select
+                          value={reviewProductFilter}
+                          onChange={e => setReviewProductFilter(e.target.value)}
+                          style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.82rem', fontWeight: '700', background: '#FAF6F0' }}
+                        >
+                          <option value="ALL">All Products ({reviews.length})</option>
+                          {products.map(p => {
+                            const count = reviews.filter(r => (r.productSku || r.product_sku) === p.sku).length;
+                            return (
+                              <option key={p.sku} value={p.sku}>{p.name} ({count})</option>
+                            );
+                          })}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: '0.72rem', fontWeight: '800', color: '#64748B', display: 'block', marginBottom: '2px' }}>Filter by Rating</label>
+                        <select
+                          value={reviewRatingFilter}
+                          onChange={e => setReviewRatingFilter(e.target.value)}
+                          style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.82rem', fontWeight: '700', background: '#FAF6F0' }}
+                        >
+                          <option value="ALL">All Ratings</option>
+                          <option value="5">⭐⭐⭐⭐⭐ (5 Stars)</option>
+                          <option value="4">⭐⭐⭐⭐ (4 Stars)</option>
+                          <option value="3">⭐⭐⭐ (3 Stars)</option>
+                          <option value="2">⭐⭐ (2 Stars)</option>
+                          <option value="1">⭐ (1 Star)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: '0.82rem', color: '#64748B', fontWeight: '700' }}>
+                      Showing {filteredReviews.length} of {totalReviews} Reviews
+                    </div>
+                  </div>
+
+                  {/* Reviews Grid */}
+                  {filteredReviews.length === 0 ? (
+                    <div style={{ background: '#fff', borderRadius: '16px', padding: '40px', textAlign: 'center', border: '1px solid #E2E8F0', color: '#64748B' }}>
+                      <div style={{ fontSize: '2.5rem', marginBottom: '8px' }}>⭐</div>
+                      <div style={{ fontWeight: '800', fontSize: '1.1rem', color: '#4A121E' }}>No reviews found matching the selected filter.</div>
+                      <div style={{ fontSize: '0.85rem', marginTop: '4px' }}>Clear the filters or add a new review.</div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '16px' }}>
+                      {filteredReviews.map((r, idx) => {
+                        const stars = Number(r.rating) || 5;
+                        const author = r.customerName || r.customer_name || 'Valued Patron';
+                        const phone = r.customerPhone || r.customer_phone || '';
+                        const prodName = r.productName || r.product_name || 'Artisanal Laddu';
+                        const dateStr = r.createdAt || r.created_at;
+                        const formattedDate = dateStr ? new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Recent';
+
+                        return (
+                          <div key={r.id || idx} style={{ background: '#fff', borderRadius: '14px', border: '1px solid #E2E8F0', padding: '18px', display: 'flex', flexDirection: 'column', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                              <div>
+                                <div style={{ fontWeight: '800', fontSize: '0.98rem', color: '#4A121E' }}>{author}</div>
+                                {phone && (
+                                  <div style={{ fontSize: '0.74rem', color: '#64748B', fontWeight: '600' }}>
+                                    📞 {phone.slice(0, 5)}*****
+                                  </div>
+                                )}
+                              </div>
+                              <span style={{ background: '#FEF3C7', color: '#92400E', padding: '2px 8px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: '800' }}>
+                                {'★'.repeat(stars)}{'☆'.repeat(5 - stars)} ({stars}/5)
+                              </span>
+                            </div>
+
+                            <div style={{ marginBottom: '10px' }}>
+                              <span style={{ display: 'inline-block', background: '#FAF6F0', border: '1px solid #E2E8F0', color: '#831843', padding: '3px 8px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: '800' }}>
+                                🥣 {prodName}
+                              </span>
+                            </div>
+
+                            <div style={{ fontSize: '0.85rem', color: '#334155', fontStyle: 'italic', lineHeight: 1.45, marginBottom: '12px', flex: 1 }}>
+                              "{r.comment || 'Pure cow ghee taste was amazing! Highly recommended.'}"
+                            </div>
+
+                            <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', color: '#94A3B8' }}>
+                              <span>📅 {formattedDate}</span>
+                              <span style={{ color: '#059669', fontWeight: '700' }}>✓ Verified Tasting</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
           </div>
         )}
@@ -4931,6 +6135,582 @@ export default function App() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL: STAFF ORDER ENTRY (WHATSAPP / PHONE / IN-PERSON)       */}
+      {/* ------------------------------------------------------------- */}
+      {showStaffOrderModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(53, 11, 21, 0.75)', backdropFilter: 'blur(4px)', zIndex: 1250, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <div style={{ background: '#FFFFFF', borderRadius: '22px', padding: '26px', maxWidth: '640px', width: '100%', maxHeight: '92vh', overflowY: 'auto', border: '2px solid #B45309', boxShadow: '0 16px 45px rgba(0,0,0,0.35)', position: 'relative' }}>
+            
+            <button
+              onClick={() => {
+                setShowStaffOrderModal(false);
+                setStaffOrderCreatedSuccess(null);
+              }}
+              style={{ position: 'absolute', top: '16px', right: '16px', background: 'transparent', border: 'none', fontSize: '1.2rem', color: '#94A3B8', cursor: 'pointer' }}
+            >
+              ✕
+            </button>
+
+            {staffOrderCreatedSuccess ? (
+              /* Success Screen with Instant WhatsApp Confirmation Dispatch */
+              <div style={{ textAlign: 'center', padding: '16px 8px' }}>
+                <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: '#DEF7EC', color: '#03543F', fontSize: '2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                  ✓
+                </div>
+
+                <h3 className="royal-title" style={{ fontSize: '1.5rem', fontWeight: '800', color: '#4A121E', margin: '0 0 6px' }}>
+                  Order Created Successfully!
+                </h3>
+                <div style={{ fontSize: '0.9rem', color: '#64748B', marginBottom: '16px' }}>
+                  Order <b>{staffOrderCreatedSuccess.orderId}</b> has been recorded in the Supabase Kitchen OMS.
+                </div>
+
+                <div style={{ background: '#FAF6F0', borderRadius: '14px', border: '1.5px solid #FDE68A', padding: '16px', textAlign: 'left', marginBottom: '20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <span style={{ color: '#64748B', fontSize: '0.85rem' }}>Patron:</span>
+                    <b style={{ color: '#4A121E' }}>{staffOrderCreatedSuccess.name} (+91 {staffOrderCreatedSuccess.phone})</b>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <span style={{ color: '#64748B', fontSize: '0.85rem' }}>Items:</span>
+                    <b>{staffOrderCreatedSuccess.itemsCount} Pack(s)</b>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #E2E8F0', paddingTop: '6px' }}>
+                    <span style={{ fontWeight: '800', color: '#4A121E' }}>Grand Total:</span>
+                    <b style={{ color: '#059669', fontSize: '1.1rem' }}>₹{staffOrderCreatedSuccess.total.toLocaleString('en-IN')}</b>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <a
+                    href={staffOrderCreatedSuccess.waUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      background: '#25D366',
+                      color: '#fff',
+                      textDecoration: 'none',
+                      padding: '14px 20px',
+                      borderRadius: '10px',
+                      fontWeight: '800',
+                      fontSize: '1rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      boxShadow: '0 4px 14px rgba(37, 211, 102, 0.35)'
+                    }}
+                  >
+                    💬 Send Order Confirmation to Patron via WhatsApp →
+                  </a>
+
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStaffOrderCreatedSuccess(null);
+                        setStaffOrderPhone('');
+                        setStaffOrderName('');
+                        setStaffOrderAddress('');
+                        setStaffOrderItems([]);
+                        setStaffOrderNotes('');
+                      }}
+                      style={{ flex: 1, background: '#FAF6F0', border: '1px solid #CBD5E1', padding: '10px', borderRadius: '8px', fontWeight: '800', color: '#4A121E', cursor: 'pointer' }}
+                    >
+                      + Create Another Staff Order
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowStaffOrderModal(false);
+                        setStaffOrderCreatedSuccess(null);
+                      }}
+                      style={{ background: '#4A121E', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '8px', fontWeight: '800', cursor: 'pointer' }}
+                    >
+                      Done / Close
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* Staff Order Form */
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '1.5rem' }}>💬</span>
+                  <div>
+                    <h3 className="royal-title" style={{ fontSize: '1.35rem', fontWeight: '800', color: '#4A121E', margin: 0 }}>
+                      Staff Order Entry
+                    </h3>
+                    <div style={{ fontSize: '0.78rem', color: '#64748B' }}>
+                      Enter WhatsApp, Phone or Walk-in orders on behalf of patrons. Auto-syncs with Supabase CRM.
+                    </div>
+                  </div>
+                </div>
+
+                <hr style={{ border: 'none', borderTop: '1px solid #FAF6F0', margin: '14px 0' }} />
+
+                {/* SECTION 1: CUSTOMER IDENTIFICATION (PHONE = UNIQUE ID) */}
+                <div style={{ background: '#FAF6F0', borderRadius: '12px', padding: '14px', border: '1px solid #FDE68A', marginBottom: '16px' }}>
+                  <div style={{ fontWeight: '800', fontSize: '0.85rem', color: '#4A121E', marginBottom: '8px' }}>
+                    1. Patron Contact (10-Digit Mobile is Unique Primary Key)
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px' }}>
+                        10-DIGIT MOBILE NUMBER *
+                      </label>
+                      <input
+                        type="tel"
+                        maxLength={10}
+                        placeholder="e.g. 9845123456"
+                        value={staffOrderPhone}
+                        onChange={e => handleStaffOrderPhoneLookup(e.target.value)}
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.88rem', fontWeight: '700' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px' }}>
+                        PATRON FULL NAME *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Rajesh Kumar"
+                        value={staffOrderName}
+                        onChange={e => setStaffOrderName(e.target.value)}
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.88rem' }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Live CRM Lookup Status */}
+                  {staffCustomerLookupStatus && (
+                    <div style={{ marginTop: '8px', fontSize: '0.75rem', fontWeight: '700', padding: '6px 10px', borderRadius: '6px', background: staffCustomerLookupStatus.found ? '#DEF7EC' : '#FEF3C7', color: staffCustomerLookupStatus.found ? '#03543F' : '#92400E' }}>
+                      {staffCustomerLookupStatus.found 
+                        ? `🟢 Existing Patron Found: ${staffCustomerLookupStatus.name} (${staffCustomerLookupStatus.totalOrders} past orders)`
+                        : '✨ New Patron: Will automatically be registered into Supabase CRM'
+                      }
+                    </div>
+                  )}
+                </div>
+
+                {/* SECTION 2: CHANNEL & FULFILLMENT */}
+                <div style={{ background: '#FAF6F0', borderRadius: '12px', padding: '14px', border: '1px solid #E2E8F0', marginBottom: '16px' }}>
+                  <div style={{ fontWeight: '800', fontSize: '0.85rem', color: '#4A121E', marginBottom: '8px' }}>
+                    2. Order Source & Delivery Method
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px' }}>
+                        ORDER CHANNEL
+                      </label>
+                      <select
+                        value={staffOrderChannel}
+                        onChange={e => setStaffOrderChannel(e.target.value)}
+                        style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', fontWeight: '700' }}
+                      >
+                        <option value="WHATSAPP">💬 WhatsApp Chat Order</option>
+                        <option value="PHONE">📞 Phone Call Order</option>
+                        <option value="COUNTER">🏪 Counter / Walk-in Order</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px' }}>
+                        FULFILLMENT METHOD
+                      </label>
+                      <select
+                        value={staffOrderFulfillment}
+                        onChange={e => setStaffOrderFulfillment(e.target.value)}
+                        style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', fontWeight: '700' }}
+                      >
+                        <option value="PICKUP">🛍️ Self-Pickup (@ Prestige Tranquility)</option>
+                        <option value="PORTER">🚚 Doorstep Delivery (Porter Service - Paid)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {staffOrderFulfillment === 'PORTER' && (
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#1E40AF', marginBottom: '4px' }}>
+                        PATRON DOORSTEP DELIVERY ADDRESS * (Required for Porter)
+                      </label>
+                      <textarea
+                        rows={2}
+                        placeholder="House / Flat No, Apartment/Society Name, Street, Landmark, Pincode"
+                        value={staffOrderAddress}
+                        onChange={e => setStaffOrderAddress(e.target.value)}
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: '8px', border: '1.5px solid #93C5FD', fontSize: '0.85rem' }}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* SECTION 3: ADD ITEMS TO ORDER */}
+                <div style={{ background: '#FAF6F0', borderRadius: '12px', padding: '14px', border: '1px solid #E2E8F0', marginBottom: '16px' }}>
+                  <div style={{ fontWeight: '800', fontSize: '0.85rem', color: '#4A121E', marginBottom: '8px' }}>
+                    3. Select Laddus & Savories
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.2fr 0.8fr auto', gap: '8px', alignItems: 'flex-end', marginBottom: '12px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px' }}>
+                        PRODUCT
+                      </label>
+                      <select
+                        value={staffSelectedProductSku}
+                        onChange={e => setStaffSelectedProductSku(e.target.value)}
+                        style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.82rem', fontWeight: '700' }}
+                      >
+                        {products.map(p => (
+                          <option key={p.sku} value={p.sku}>{p.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px' }}>
+                        WEIGHT / PACK
+                      </label>
+                      <select
+                        value={staffSelectedWeightKey}
+                        onChange={e => setStaffSelectedWeightKey(e.target.value)}
+                        style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.82rem', fontWeight: '700' }}
+                      >
+                        {(() => {
+                          const p = products.find(prod => prod.sku === staffSelectedProductSku);
+                          if (p && p.category === 'SAVORY') {
+                            return (
+                              <>
+                                <option value="100g">100g (₹{p.p500 || 275})</option>
+                                <option value="200g">200g (₹{p.p1k || 550})</option>
+                                <option value="400g">400g (₹{p.ratePerKg || 1000})</option>
+                              </>
+                            );
+                          }
+                          const p250 = p ? (p.p250 || Math.round((p.ratePerKg || 1200) * 0.25)) : 300;
+                          const p500 = p ? (p.p500 || Math.round((p.ratePerKg || 1200) * 0.5)) : 600;
+                          const p1k = p ? (p.p1k || (p.ratePerKg || 1200)) : 1200;
+                          return (
+                            <>
+                              <option value="250g">250g (₹{p250})</option>
+                              <option value="500g">500g (₹{p500})</option>
+                              <option value="1Kg">1 Kg (₹{p1k})</option>
+                            </>
+                          );
+                        })()}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px' }}>
+                        QTY
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="50"
+                        value={staffSelectedQty}
+                        onChange={e => setStaffSelectedQty(e.target.value)}
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '8px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.82rem', fontWeight: '700', textAlign: 'center' }}
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleStaffAddOrderItem}
+                      style={{ background: '#059669', color: '#fff', border: 'none', padding: '9px 14px', borderRadius: '8px', fontWeight: '800', fontSize: '0.82rem', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                    >
+                      + Add
+                    </button>
+                  </div>
+
+                  {/* Added Items List */}
+                  {staffOrderItems.length === 0 ? (
+                    <div style={{ background: '#fff', borderRadius: '8px', border: '1px dashed #CBD5E1', padding: '14px', textAlign: 'center', color: '#94A3B8', fontSize: '0.82rem' }}>
+                      No items added to this order yet. Select a laddu above and click "+ Add".
+                    </div>
+                  ) : (
+                    <div style={{ background: '#fff', borderRadius: '8px', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+                      {staffOrderItems.map((item, idx) => (
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderBottom: idx < staffOrderItems.length - 1 ? '1px solid #F1F5F9' : 'none', fontSize: '0.82rem' }}>
+                          <div>
+                            <b style={{ color: '#4A121E' }}>{item.qty}x {item.name}</b>
+                            <span style={{ color: '#64748B', marginLeft: '6px' }}>({item.cleanWeight})</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span style={{ fontWeight: '800', color: '#059669' }}>₹{item.unitPrice * item.qty}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleStaffRemoveOrderItem(idx)}
+                              style={{ background: 'transparent', border: 'none', color: '#DC2626', cursor: 'pointer', fontSize: '0.85rem', padding: '2px 4px' }}
+                              title="Remove item"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      <div style={{ background: '#FAF6F0', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1.5px solid #E2E8F0' }}>
+                        <span style={{ fontWeight: '800', color: '#4A121E', fontSize: '0.9rem' }}>Order Grand Total:</span>
+                        <b style={{ color: '#059669', fontSize: '1.1rem' }}>
+                          ₹{staffOrderItems.reduce((sum, it) => sum + (it.unitPrice * it.qty), 0).toLocaleString('en-IN')}
+                        </b>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* SECTION 4: PAYMENT & NOTES */}
+                <div style={{ background: '#FAF6F0', borderRadius: '12px', padding: '14px', border: '1px solid #E2E8F0', marginBottom: '20px' }}>
+                  <div style={{ fontWeight: '800', fontSize: '0.85rem', color: '#4A121E', marginBottom: '8px' }}>
+                    4. Payment & Special Kitchen Instructions
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px' }}>
+                        PAYMENT STATUS
+                      </label>
+                      <select
+                        value={staffOrderPaymentStatus}
+                        onChange={e => setStaffOrderPaymentStatus(e.target.value)}
+                        style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', fontWeight: '700' }}
+                      >
+                        <option value="PAID">🟢 PAID (Payment Verified)</option>
+                        <option value="UNPAID">⏳ UNPAID (Collect on Delivery/Pickup)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px' }}>
+                        PAYMENT METHOD
+                      </label>
+                      <select
+                        value={staffOrderPaymentMethod}
+                        onChange={e => setStaffOrderPaymentMethod(e.target.value)}
+                        style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem', fontWeight: '700' }}
+                      >
+                        <option value="UPI">📱 UPI / GPay / PhonePe</option>
+                        <option value="CASH">💵 Cash at Store / COD</option>
+                        <option value="BANK_TRANSFER">🏦 Direct Bank Transfer</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px' }}>
+                      SPECIAL INSTRUCTIONS / KITCHEN NOTES [OPTIONAL]
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Mild sweetness requested / Deliver after 6 PM"
+                      value={staffOrderNotes}
+                      onChange={e => setStaffOrderNotes(e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.85rem' }}
+                    />
+                  </div>
+                </div>
+
+                {/* Submit / Cancel Buttons */}
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    type="button"
+                    disabled={isStaffSubmittingOrder || staffOrderItems.length === 0}
+                    onClick={handleStaffSubmitOrder}
+                    style={{
+                      flex: 1,
+                      background: staffOrderItems.length === 0 ? '#CBD5E1' : 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                      color: '#fff',
+                      border: 'none',
+                      padding: '14px',
+                      borderRadius: '10px',
+                      fontWeight: '800',
+                      fontSize: '0.98rem',
+                      cursor: staffOrderItems.length === 0 || isStaffSubmittingOrder ? 'not-allowed' : 'pointer',
+                      boxShadow: '0 4px 12px rgba(5, 150, 105, 0.25)'
+                    }}
+                  >
+                    {isStaffSubmittingOrder ? 'Creating Order in Supabase...' : '🚀 Confirm & Place Staff Order'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowStaffOrderModal(false)}
+                    style={{ background: '#FAF6F0', border: '1px solid #E2E8F0', padding: '12px 18px', borderRadius: '10px', fontWeight: '700', color: '#64748B', cursor: 'pointer' }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL: PRODUCT RATING & TASTING REVIEW MODAL                  */}
+      {/* ------------------------------------------------------------- */}
+      {selectedProductForReview && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(53, 11, 21, 0.75)', backdropFilter: 'blur(4px)', zIndex: 1260, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <div style={{ background: '#FFFFFF', borderRadius: '22px', padding: '26px', maxWidth: '480px', width: '100%', border: '2px solid #FDE68A', boxShadow: '0 16px 45px rgba(0,0,0,0.35)', position: 'relative' }}>
+            
+            <button
+              onClick={() => {
+                setSelectedProductForReview(null);
+                setReviewSuccessMsg('');
+              }}
+              style={{ position: 'absolute', top: '16px', right: '16px', background: 'transparent', border: 'none', fontSize: '1.2rem', color: '#94A3B8', cursor: 'pointer' }}
+            >
+              ✕
+            </button>
+
+            {/* Header with Product Preview */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
+              <img
+                src={selectedProductForReview.image}
+                alt={selectedProductForReview.name}
+                style={{ width: '56px', height: '56px', borderRadius: '12px', objectFit: 'cover', border: '1px solid #FDE68A' }}
+                onError={e => { e.target.src = 'images/TheLadduStory_Logo.jpg'; }}
+              />
+              <div>
+                <span style={{ fontSize: '0.72rem', fontWeight: '800', color: '#B45309', textTransform: 'uppercase' }}>
+                  Artisanal Tasting Review
+                </span>
+                <h3 className="royal-title" style={{ fontSize: '1.25rem', fontWeight: '800', color: '#4A121E', margin: '2px 0 0' }}>
+                  {selectedProductForReview.name}
+                </h3>
+              </div>
+            </div>
+
+            {reviewSuccessMsg ? (
+              <div style={{ background: '#DEF7EC', border: '1.5px solid #31C48D', borderRadius: '12px', padding: '18px', textAlign: 'center', margin: '20px 0' }}>
+                <div style={{ fontSize: '2rem', marginBottom: '8px' }}>🙏</div>
+                <div style={{ fontWeight: '800', color: '#03543F', fontSize: '1rem' }}>{reviewSuccessMsg}</div>
+                <div style={{ fontSize: '0.8rem', color: '#047857', marginTop: '4px' }}>
+                  Your feedback helps us maintain pure cow ghee & jaggery artisanal perfection.
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmitReview}>
+                {/* 1 to 5 Star Rating Picker */}
+                <div style={{ background: '#FAF6F0', borderRadius: '14px', padding: '14px', border: '1px solid #FDE68A', textAlign: 'center', marginBottom: '16px' }}>
+                  <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '800', color: '#4A121E', marginBottom: '6px' }}>
+                    YOUR RATING (1 TO 5 STARS)
+                  </label>
+                  
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', margin: '8px 0' }}>
+                    {[1, 2, 3, 4, 5].map(star => (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => setReviewRatingInput(star)}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          fontSize: '2rem',
+                          color: star <= reviewRatingInput ? '#F59E0B' : '#D1D5DB',
+                          cursor: 'pointer',
+                          padding: '0 4px',
+                          transition: 'transform 0.15s ease'
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.2)'}
+                        onMouseLeave={e => e.currentTarget.style.transform = 'scale(1.0)'}
+                      >
+                        ★
+                      </button>
+                    ))}
+                  </div>
+
+                  <div style={{ fontSize: '0.82rem', fontWeight: '800', color: '#B45309' }}>
+                    {reviewRatingInput === 5 && '⭐⭐⭐⭐⭐ Superb! Loved the cow ghee aroma & taste'}
+                    {reviewRatingInput === 4 && '⭐⭐⭐⭐ Very good & fresh'}
+                    {reviewRatingInput === 3 && '⭐⭐⭐ Good taste'}
+                    {reviewRatingInput === 2 && '⭐⭐ Average'}
+                    {reviewRatingInput === 1 && '⭐ Needs improvement'}
+                  </div>
+                </div>
+
+                {/* Patron Name Input */}
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px' }}>
+                    YOUR NAME *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Priya Sharma"
+                    value={reviewNameInput || (customerUser ? customerUser.name : '')}
+                    onChange={e => setReviewNameInput(e.target.value)}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.9rem' }}
+                  />
+                </div>
+
+                {/* Patron Mobile Number (Optional) */}
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px' }}>
+                    10-DIGIT MOBILE NUMBER [OPTIONAL]
+                  </label>
+                  <input
+                    type="tel"
+                    maxLength={10}
+                    placeholder="e.g. 9845123456"
+                    value={reviewPhoneInput || (customerUser ? customerUser.phone : '')}
+                    onChange={e => setReviewPhoneInput(e.target.value)}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.9rem' }}
+                  />
+                </div>
+
+                {/* Review / Tasting Comments */}
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px' }}>
+                    TASTING NOTES / REVIEW COMMENTS [OPTIONAL]
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="Tell us what you loved about the cow ghee richness, natural jaggery sweetness, or crunch..."
+                    value={reviewCommentInput}
+                    onChange={e => setReviewCommentInput(e.target.value)}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.88rem' }}
+                  />
+                </div>
+
+                {/* Submit / Cancel Buttons */}
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingReview}
+                    style={{
+                      flex: 1,
+                      background: 'linear-gradient(135deg, #4A121E 0%, #831843 100%)',
+                      color: '#fff',
+                      border: 'none',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      fontWeight: '800',
+                      fontSize: '0.92rem',
+                      cursor: isSubmittingReview ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    {isSubmittingReview ? 'Submitting Review...' : '⭐ Submit Honest Review'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedProductForReview(null)}
+                    style={{ background: '#FAF6F0', border: '1px solid #E2E8F0', padding: '12px 14px', borderRadius: '8px', fontWeight: '700', color: '#64748B', cursor: 'pointer' }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

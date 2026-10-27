@@ -115,6 +115,7 @@ export const fetchOrdersFromSupabase = async () => {
 
     return (orders || []).map(o => {
       const isPickup = (o.channel && o.channel.includes('PICKUP')) || (o.notes && o.notes.includes('PICKUP'));
+      const isPorter = (o.channel && o.channel.includes('PORTER')) || (o.notes && o.notes.includes('PORTER'));
       const statusMatch = (o.notes || '').match(/\[STATUS:([^\]]+)\]/);
       const resolvedStatus = statusMatch ? statusMatch[1].trim() : o.order_status;
       const cleanNotes = (o.notes || '').replace(/\[STATUS:[^\]]+\]/g, '').trim();
@@ -126,7 +127,7 @@ export const fetchOrdersFromSupabase = async () => {
           hour: 'numeric', minute: '2-digit', hour12: true
         }),
         channel: o.channel || 'ONLINE_STORE',
-        fulfillmentType: isPickup ? 'PICKUP' : 'DELIVERY',
+        fulfillmentType: isPorter ? 'PORTER' : (isPickup ? 'PICKUP' : 'DELIVERY'),
         name: o.customer_name,
         phone: o.customer_phone,
         address: o.customer_address,
@@ -150,10 +151,12 @@ export const fetchOrdersFromSupabase = async () => {
 export const insertOrderToSupabase = async (order) => {
   if (!supabaseInstance) return { success: false, reason: 'NOT_CONFIGURED' };
   try {
-    const fulfillmentLabel = order.fulfillmentType === 'PICKUP' ? 'STORE_PICKUP' : (order.channel || 'ONLINE_STORE');
-    const enrichedNotes = order.fulfillmentType === 'PICKUP'
-      ? `[PICKUP AT KITCHEN] ${order.notes || ''}`.trim()
-      : (order.notes || '');
+    const isPorter = order.fulfillmentType === 'PORTER' || (order.channel && order.channel.includes('PORTER'));
+    const isPickup = order.fulfillmentType === 'PICKUP';
+    const fulfillmentLabel = isPorter ? (order.channel || 'DOORSTEP_PORTER') : (isPickup ? 'STORE_PICKUP' : (order.channel || 'ONLINE_STORE'));
+    const enrichedNotes = isPorter
+      ? `[PORTER DELIVERY] ${order.notes || ''}`.trim()
+      : (isPickup ? `[PICKUP AT KITCHEN] ${order.notes || ''}`.trim() : (order.notes || ''));
 
     // 1. Insert order record
     const { error: orderErr } = await supabaseInstance
@@ -666,6 +669,124 @@ export const updateCustomerDetailsInSupabase = async (phone, { name, address }) 
     return { success: false, error: e.message };
   }
 };
+
+/**
+ * Update order notes (including Porter tracking details) in Supabase
+ */
+export const updateOrderNotesInSupabase = async (orderId, newNotes) => {
+  if (!supabaseInstance) return { success: false, reason: 'NOT_CONFIGURED' };
+  try {
+    const { error } = await supabaseInstance
+      .from('orders')
+      .update({
+        notes: newNotes,
+        updated_at: new Date().toISOString()
+      })
+      .eq('order_id', orderId);
+
+    if (error) throw error;
+    return { success: true };
+  } catch (err) {
+    console.error('[Supabase] updateOrderNotes error:', err);
+    return { success: false, error: err.message };
+  }
+};
+
+/**
+ * Update Porter Delivery coordination details in an order
+ */
+export const updateOrderPorterDetailsInSupabase = async (orderId, { porterStatus, bookingId, driverName, driverPhone, fare, trackingUrl }) => {
+  if (!supabaseInstance) return { success: false, reason: 'NOT_CONFIGURED' };
+  try {
+    const { data: existing } = await supabaseInstance
+      .from('orders')
+      .select('notes')
+      .eq('order_id', orderId)
+      .maybeSingle();
+
+    const rawNotes = existing?.notes || '';
+    // Strip previous PORTER_INFO block if present
+    const cleanNotes = rawNotes.replace(/\[PORTER_INFO:[^\]]+\]/g, '').trim();
+
+    const porterTag = `[PORTER_INFO: status=${porterStatus || 'Requested'}|booking=${bookingId || ''}|driver=${driverName || ''}|phone=${driverPhone || ''}|fare=${fare || ''}|track=${trackingUrl || ''}]`;
+    const finalNotes = `${cleanNotes} ${porterTag}`.trim();
+
+    const { error } = await supabaseInstance
+      .from('orders')
+      .update({
+        notes: finalNotes,
+        updated_at: new Date().toISOString()
+      })
+      .eq('order_id', orderId);
+
+    if (error) throw error;
+    return { success: true, notes: finalNotes };
+  } catch (err) {
+    console.error('[Supabase] updateOrderPorterDetails error:', err);
+    return { success: false, error: err.message };
+  }
+};
+
+/**
+ * Fetch Product Reviews from Supabase
+ */
+export const fetchReviewsFromSupabase = async () => {
+  if (!supabaseInstance) return null;
+  try {
+    const { data, error } = await supabaseInstance
+      .from('product_reviews')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.warn('[Supabase] product_reviews query notice:', error.message);
+      return null;
+    }
+    return (data || []).map(r => ({
+      id: r.id,
+      productSku: r.product_sku,
+      productName: r.product_name,
+      rating: Number(r.rating),
+      customerName: r.customer_name,
+      customerPhone: r.customer_phone || '',
+      comment: r.comment || '',
+      orderId: r.order_id || '',
+      createdAt: r.created_at
+    }));
+  } catch (err) {
+    console.warn('[Supabase] fetchReviews error:', err);
+    return null;
+  }
+};
+
+/**
+ * Insert a Product Review in Supabase
+ */
+export const insertReviewToSupabase = async (review) => {
+  if (!supabaseInstance) return { success: false, reason: 'NOT_CONFIGURED' };
+  try {
+    const { data, error } = await supabaseInstance
+      .from('product_reviews')
+      .insert({
+        product_sku: review.productSku,
+        product_name: review.productName,
+        rating: review.rating,
+        customer_name: review.customerName,
+        customer_phone: review.customerPhone || '',
+        comment: review.comment || '',
+        order_id: review.orderId || ''
+      })
+      .select()
+      .maybeSingle();
+
+    if (error) throw error;
+    return { success: true, data };
+  } catch (err) {
+    console.error('[Supabase] insertReview error:', err);
+    return { success: false, error: err.message };
+  }
+};
+
 
 
 

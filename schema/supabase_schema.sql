@@ -140,3 +140,25 @@ on conflict (sku) do update set
     stock_status = excluded.stock_status,
     stock_count = excluded.stock_count,
     updated_at = now();
+
+-- 9. PRODUCT REVIEWS & RATINGS TABLE
+create table if not exists public.product_reviews (
+    id uuid primary key default uuid_generate_v4(),
+    product_sku text not null,
+    product_name text not null,
+    rating integer not null check (rating >= 1 and rating <= 5),
+    customer_name text not null,
+    customer_phone text,
+    comment text,
+    order_id text,
+    created_at timestamptz default now()
+);
+
+create index if not exists idx_reviews_product_sku on public.product_reviews(product_sku);
+create index if not exists idx_reviews_created_at on public.product_reviews(created_at desc);
+
+alter table public.product_reviews enable row level security;
+create policy "Allow public read product_reviews" on public.product_reviews for select using (true);
+create policy "Allow public insert product_reviews" on public.product_reviews for insert with check (true);
+alter publication supabase_realtime add table public.product_reviews;
+
