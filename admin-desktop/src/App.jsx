@@ -472,7 +472,13 @@ export default function App() {
   const [kitchenStatusFilter, setKitchenStatusFilter] = useState('PENDING'); // 'PENDING' | 'RECEIVED_ONLY' | 'PREPARING_ONLY'
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(() => {
     try {
-      return sessionStorage.getItem('tls_staff_logged_in') === 'true';
+      const isStaff = typeof window !== 'undefined' && (
+        window.location.search.includes('staff') ||
+        window.location.search.includes('admin') ||
+        window.location.hash.includes('staff') ||
+        window.location.hash.includes('admin')
+      );
+      return isStaff && sessionStorage.getItem('tls_staff_logged_in') === 'true';
     } catch(e) {
       return false;
     }
@@ -1839,7 +1845,7 @@ export default function App() {
       setAdminPinInput('');
       setActiveTab('admin');
     } else {
-      alert('Incorrect Staff PIN. (Default PIN: 1234)');
+      alert('❌ Incorrect Staff PIN. Please try again.');
     }
   };
 
@@ -2420,41 +2426,43 @@ export default function App() {
               </button>
             )}
 
-            {/* Staff OMS Login Button */}
-            {isAdminLoggedIn ? (
-              <button
-                id="nav-staff-dashboard-btn"
-                onClick={() => setActiveTab('admin')}
-                style={{
-                  background: activeTab === 'admin' ? '#FDE68A' : 'rgba(214, 229, 186, 0.3)',
-                  color: '#4A121E',
-                  border: 'none',
-                  padding: '8px 14px',
-                  borderRadius: '8px',
-                  fontWeight: '800',
-                  fontSize: '0.85rem',
-                  cursor: 'pointer'
-                }}
-              >
-                ⚙️ Staff OMS ({orders.length})
-              </button>
-            ) : (
-              <button
-                id="nav-staff-login-btn"
-                onClick={() => setShowLoginModal(true)}
-                style={{
-                  background: 'rgba(255,255,255,0.1)',
-                  color: '#FDE68A',
-                  border: '1px solid rgba(253, 230, 138, 0.4)',
-                  padding: '8px 12px',
-                  borderRadius: '8px',
-                  fontSize: '0.82rem',
-                  fontWeight: '700',
-                  cursor: 'pointer'
-                }}
-              >
-                🔒 Staff Login
-              </button>
+            {/* Staff OMS Login Button - Strictly isolated to Staff URL route */}
+            {isStaffRoute && (
+              isAdminLoggedIn ? (
+                <button
+                  id="nav-staff-dashboard-btn"
+                  onClick={() => setActiveTab('admin')}
+                  style={{
+                    background: activeTab === 'admin' ? '#FDE68A' : 'rgba(214, 229, 186, 0.3)',
+                    color: '#4A121E',
+                    border: 'none',
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    fontWeight: '800',
+                    fontSize: '0.85rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  ⚙️ Staff OMS ({orders.length})
+                </button>
+              ) : (
+                <button
+                  id="nav-staff-login-btn"
+                  onClick={() => setShowLoginModal(true)}
+                  style={{
+                    background: 'transparent',
+                    color: '#FDE68A',
+                    border: '1px dashed #FDE68A',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    fontSize: '0.82rem',
+                    fontWeight: '700',
+                    cursor: 'pointer'
+                  }}
+                >
+                  🔒 Staff Login
+                </button>
+              )
             )}
           </div>
 
@@ -3345,7 +3353,13 @@ export default function App() {
                   🔄 Sync Master OMS
                 </button>
                 <button
-                  onClick={() => setIsAdminLoggedIn(false)}
+                  onClick={() => {
+                    setIsAdminLoggedIn(false);
+                    try {
+                      sessionStorage.removeItem('tls_staff_logged_in');
+                    } catch (e) {}
+                    setActiveTab('store');
+                  }}
                   style={{ background: '#F1F5F9', border: '1px solid #CBD5E1', padding: '8px 14px', borderRadius: '8px', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer' }}
                 >
                   Logout
@@ -5862,7 +5876,7 @@ export default function App() {
               <input
                 id="staff-pin-input"
                 type="password"
-                placeholder="Staff PIN (1234)"
+                placeholder="••••"
                 value={adminPinInput}
                 onChange={e => setAdminPinInput(e.target.value)}
                 maxLength={4}
