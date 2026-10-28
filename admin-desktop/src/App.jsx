@@ -583,6 +583,7 @@ export default function App() {
     return [];
   });
   const [selectedProductForReview, setSelectedProductForReview] = useState(null);
+  const [isStaffReviewMode, setIsStaffReviewMode] = useState(false);
   const [reviewRatingInput, setReviewRatingInput] = useState(5);
   const [reviewNameInput, setReviewNameInput] = useState('');
   const [reviewPhoneInput, setReviewPhoneInput] = useState('');
@@ -1604,6 +1605,7 @@ export default function App() {
       setTimeout(() => {
         setReviewSuccessMsg('');
         setSelectedProductForReview(null);
+        setIsStaffReviewMode(false);
         setReviewCommentInput('');
         setReviewRatingInput(5);
         setReviewOrderIdInput('');
@@ -2666,6 +2668,7 @@ export default function App() {
                                   type="button"
                                   onClick={() => {
                                     setSelectedProductForReview(product);
+                                    setIsStaffReviewMode(false);
                                     setReviewRatingInput(5);
                                     setReviewCommentInput('');
                                     setReviewOrderIdInput('');
@@ -2673,9 +2676,9 @@ export default function App() {
                                     if (customerUser) {
                                       setReviewNameInput(customerUser.name || '');
                                       setReviewPhoneInput(customerUser.phone || '');
-                                    } else if (custName) {
-                                      setReviewNameInput(custName);
-                                      setReviewPhoneInput(custPhone);
+                                    } else {
+                                      setReviewNameInput('');
+                                      setReviewPhoneInput('');
                                     }
                                   }}
                                   style={{
@@ -3012,6 +3015,7 @@ export default function App() {
                                   ? (products.find(p => p.sku === firstItem.sku || p.name === firstItem.name) || { sku: firstItem.sku || 'general', name: firstItem.name, image: 'images/TheLadduStory_Logo.jpg' })
                                   : products[0];
                                 setSelectedProductForReview(prod);
+                                setIsStaffReviewMode(false);
                                 setReviewOrderIdInput(o.orderId || o.id || '');
                                 setReviewRatingInput(5);
                                 setReviewCommentInput('');
@@ -4210,6 +4214,7 @@ export default function App() {
                     <button
                       onClick={() => {
                         setSelectedProductForReview(products[0]);
+                        setIsStaffReviewMode(true);
                         setReviewRatingInput(5);
                         setReviewNameInput('');
                         setReviewPhoneInput('');
@@ -6636,305 +6641,458 @@ export default function App() {
       {/* ------------------------------------------------------------- */}
       {/* MODAL: PRODUCT RATING & TASTING REVIEW MODAL                  */}
       {/* ------------------------------------------------------------- */}
-      {selectedProductForReview && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(53, 11, 21, 0.75)', backdropFilter: 'blur(4px)', zIndex: 1260, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
-          <div style={{ background: '#FFFFFF', borderRadius: '22px', padding: '26px', maxWidth: '480px', width: '100%', maxHeight: '92vh', overflowY: 'auto', border: '2px solid #FDE68A', boxShadow: '0 16px 45px rgba(0,0,0,0.35)', position: 'relative' }}>
-            
-            <button
-              onClick={() => {
-                setSelectedProductForReview(null);
-                setReviewSuccessMsg('');
-              }}
-              style={{ position: 'absolute', top: '16px', right: '16px', background: 'transparent', border: 'none', fontSize: '1.2rem', color: '#94A3B8', cursor: 'pointer' }}
-            >
-              ✕
-            </button>
+      {selectedProductForReview && (() => {
+        const isStaff = isStaffReviewMode || (isAdminLoggedIn && activeTab === 'admin');
+        return (
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(53, 11, 21, 0.75)', backdropFilter: 'blur(4px)', zIndex: 1260, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+            <div style={{ background: '#FFFFFF', borderRadius: '22px', padding: '26px', maxWidth: '480px', width: '100%', maxHeight: '92vh', overflowY: 'auto', border: isStaff ? '2px solid #059669' : '2px solid #FDE68A', boxShadow: '0 16px 45px rgba(0,0,0,0.35)', position: 'relative' }}>
+              
+              <button
+                onClick={() => {
+                  setSelectedProductForReview(null);
+                  setIsStaffReviewMode(false);
+                  setReviewSuccessMsg('');
+                }}
+                style={{ position: 'absolute', top: '16px', right: '16px', background: 'transparent', border: 'none', fontSize: '1.2rem', color: '#94A3B8', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
 
-            {/* Header with Product Preview */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
-              <img
-                src={selectedProductForReview.image || 'images/TheLadduStory_Logo.jpg'}
-                alt={selectedProductForReview.name}
-                style={{ width: '56px', height: '56px', borderRadius: '12px', objectFit: 'cover', border: '1px solid #FDE68A', flexShrink: 0 }}
-                onError={e => { e.target.src = 'images/TheLadduStory_Logo.jpg'; }}
-              />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ fontSize: '0.72rem', fontWeight: '800', color: '#B45309', textTransform: 'uppercase' }}>
-                  Artisanal Tasting Review
-                </span>
-                <h3 className="royal-title" style={{ fontSize: '1.25rem', fontWeight: '800', color: '#4A121E', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {selectedProductForReview.name}
-                </h3>
-              </div>
-            </div>
-
-            {reviewSuccessMsg ? (
-              <div style={{ background: '#DEF7EC', border: '1.5px solid #31C48D', borderRadius: '12px', padding: '18px', textAlign: 'center', margin: '20px 0' }}>
-                <div style={{ fontSize: '2rem', marginBottom: '8px' }}>🙏</div>
-                <div style={{ fontWeight: '800', color: '#03543F', fontSize: '1rem' }}>{reviewSuccessMsg}</div>
-                <div style={{ fontSize: '0.8rem', color: '#047857', marginTop: '4px' }}>
-                  Your feedback helps us maintain pure cow ghee & jaggery artisanal perfection.
-                </div>
-              </div>
-            ) : (
-              <form onSubmit={handleSubmitReview}>
-                {/* 1. Item / SKU Selector Dropdown */}
-                <div style={{ marginBottom: '14px' }}>
-                  <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px' }}>
-                    SELECT ITEM / SKU FOR REVIEW *
-                  </label>
-                  <select
-                    value={selectedProductForReview.sku}
-                    onChange={(e) => {
-                      const targetSku = e.target.value;
-                      const found = products.find(p => p.sku === targetSku);
-                      if (found) {
-                        setSelectedProductForReview(found);
-                      }
-                    }}
-                    style={{
-                      width: '100%',
-                      boxSizing: 'border-box',
-                      padding: '10px 12px',
-                      borderRadius: '8px',
-                      border: '1.5px solid #FDE68A',
-                      background: '#FFFDF9',
-                      fontSize: '0.9rem',
-                      fontWeight: '700',
-                      color: '#4A121E',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {products.map(p => (
-                      <option key={p.sku} value={p.sku}>
-                        🥣 {p.name} ({p.sku})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* 2. Star Rating (1 to 5) */}
-                <div style={{ background: '#FAF6F0', borderRadius: '14px', padding: '14px', border: '1px solid #FDE68A', textAlign: 'center', marginBottom: '14px' }}>
-                  <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '800', color: '#4A121E', marginBottom: '6px' }}>
-                    YOUR RATING (1 TO 5 STARS)
-                  </label>
-                  
-                  <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', margin: '8px 0' }}>
-                    {[1, 2, 3, 4, 5].map(star => (
-                      <button
-                        key={star}
-                        type="button"
-                        onClick={() => setReviewRatingInput(star)}
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          fontSize: '2rem',
-                          color: star <= reviewRatingInput ? '#F59E0B' : '#D1D5DB',
-                          cursor: 'pointer',
-                          padding: '0 4px',
-                          transition: 'transform 0.15s ease'
-                        }}
-                        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.2)'}
-                        onMouseLeave={e => e.currentTarget.style.transform = 'scale(1.0)'}
-                      >
-                        ★
-                      </button>
-                    ))}
-                  </div>
-
-                  <div style={{ fontSize: '0.82rem', fontWeight: '800', color: '#B45309' }}>
-                    {reviewRatingInput === 5 && '⭐⭐⭐⭐⭐ Superb! Loved the cow ghee aroma & taste'}
-                    {reviewRatingInput === 4 && '⭐⭐⭐⭐ Very good & fresh'}
-                    {reviewRatingInput === 3 && '⭐⭐⭐ Good taste'}
-                    {reviewRatingInput === 2 && '⭐⭐ Average'}
-                    {reviewRatingInput === 1 && '⭐ Needs improvement'}
-                  </div>
-                </div>
-
-                {/* 3. Patron Mobile Number & Auto-Lookup */}
-                <div style={{ marginBottom: '12px' }}>
-                  <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px' }}>
-                    10-DIGIT MOBILE NUMBER [OPTIONAL]
-                  </label>
-                  <input
-                    type="tel"
-                    maxLength={10}
-                    placeholder="e.g. 9845123456"
-                    value={reviewPhoneInput || (customerUser ? customerUser.phone : '')}
-                    onChange={e => {
-                      const val = e.target.value;
-                      setReviewPhoneInput(val);
-                      const clean = val.replace(/\D/g, '').slice(-10);
-                      if (clean.length === 10) {
-                        const matched = orders.filter(o => (o.phone || '').replace(/\D/g, '').slice(-10) === clean);
-                        if (matched.length > 0) {
-                          if (!reviewNameInput && matched[0].name) setReviewNameInput(matched[0].name);
-                          if (!reviewOrderIdInput) {
-                            setReviewOrderIdInput(matched[0].orderId || matched[0].id || '');
-                            if (matched[0].items && matched[0].items.length > 0) {
-                              const firstIt = matched[0].items[0];
-                              const foundP = products.find(p => p.sku === firstIt.sku || p.name === firstIt.name);
-                              if (foundP) setSelectedProductForReview(foundP);
-                            }
-                          }
-                        } else {
-                          lookupCustomerInSupabase(clean).then(cust => {
-                            if (cust && cust.name && !reviewNameInput) setReviewNameInput(cust.name);
-                          });
-                        }
-                      }
-                    }}
-                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.9rem' }}
-                  />
-                </div>
-
-                {/* 4. Associated Order Dropdown [Optional] */}
-                <div style={{ marginBottom: '12px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                    <label style={{ fontSize: '0.74rem', fontWeight: '800', color: '#4A121E' }}>
-                      ASSOCIATED ORDER [OPTIONAL]
-                    </label>
-                    {reviewOrderIdInput && (
-                      <button
-                        type="button"
-                        onClick={() => setReviewOrderIdInput('')}
-                        style={{ background: 'transparent', border: 'none', color: '#B45309', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', textDecoration: 'underline' }}
-                      >
-                        Clear Order
-                      </button>
+              {/* Header with Product Preview & Mode Indicator */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
+                <img
+                  src={selectedProductForReview.image || 'images/TheLadduStory_Logo.jpg'}
+                  alt={selectedProductForReview.name}
+                  style={{ width: '56px', height: '56px', borderRadius: '12px', objectFit: 'cover', border: isStaff ? '1.5px solid #059669' : '1px solid #FDE68A', flexShrink: 0 }}
+                  onError={e => { e.target.src = 'images/TheLadduStory_Logo.jpg'; }}
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.72rem', fontWeight: '800', color: isStaff ? '#065F46' : '#B45309', textTransform: 'uppercase' }}>
+                      {isStaff ? 'OMS Staff Review Entry' : 'Artisanal Tasting Review'}
+                    </span>
+                    {isStaff && (
+                      <span style={{ background: '#DEF7EC', color: '#03543F', fontSize: '0.68rem', fontWeight: '800', padding: '2px 6px', borderRadius: '4px' }}>
+                        Staff Mode
+                      </span>
                     )}
                   </div>
+                  <h3 className="royal-title" style={{ fontSize: '1.25rem', fontWeight: '800', color: '#4A121E', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {selectedProductForReview.name}
+                  </h3>
+                </div>
+              </div>
 
-                  {(() => {
-                    const activeCleanPhone = (reviewPhoneInput || (customerUser ? customerUser.phone : '') || '').replace(/\D/g, '').slice(-10);
-                    const patronOrders = activeCleanPhone.length === 10
-                      ? orders.filter(o => (o.phone || '').replace(/\D/g, '').slice(-10) === activeCleanPhone)
-                      : (customerUser ? orders.filter(o => (o.phone || '').replace(/\D/g, '').slice(-10) === (customerUser.phone || '').replace(/\D/g, '').slice(-10)) : []);
+              {reviewSuccessMsg ? (
+                <div style={{ background: '#DEF7EC', border: '1.5px solid #31C48D', borderRadius: '12px', padding: '18px', textAlign: 'center', margin: '20px 0' }}>
+                  <div style={{ fontSize: '2rem', marginBottom: '8px' }}>🙏</div>
+                  <div style={{ fontWeight: '800', color: '#03543F', fontSize: '1rem' }}>{reviewSuccessMsg}</div>
+                  <div style={{ fontSize: '0.8rem', color: '#047857', marginTop: '4px' }}>
+                    Your feedback helps us maintain pure cow ghee & jaggery artisanal perfection.
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleSubmitReview}>
+                  {/* 1. Item / SKU Selector Dropdown */}
+                  <div style={{ marginBottom: '14px' }}>
+                    <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px' }}>
+                      SELECT ITEM / SKU FOR REVIEW *
+                    </label>
+                    <select
+                      value={selectedProductForReview.sku}
+                      onChange={(e) => {
+                        const targetSku = e.target.value;
+                        const found = products.find(p => p.sku === targetSku);
+                        if (found) {
+                          setSelectedProductForReview(found);
+                        }
+                      }}
+                      style={{
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        padding: '10px 12px',
+                        borderRadius: '8px',
+                        border: isStaff ? '1.5px solid #059669' : '1.5px solid #FDE68A',
+                        background: '#FFFDF9',
+                        fontSize: '0.9rem',
+                        fontWeight: '700',
+                        color: '#4A121E',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {products.map(p => (
+                        <option key={p.sku} value={p.sku}>
+                          🥣 {p.name} ({p.sku})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                    return (
-                      <select
-                        value={reviewOrderIdInput}
-                        onChange={(e) => {
-                          const selectedId = e.target.value;
-                          setReviewOrderIdInput(selectedId);
-                          if (selectedId) {
-                            const foundOrder = orders.find(o => (o.orderId || o.id) === selectedId);
-                            if (foundOrder) {
-                              if (!reviewNameInput && foundOrder.name) setReviewNameInput(foundOrder.name);
-                              if (!reviewPhoneInput && foundOrder.phone) setReviewPhoneInput(foundOrder.phone);
-                              if (foundOrder.items && foundOrder.items.length > 0) {
-                                const firstIt = foundOrder.items[0];
-                                const foundP = products.find(p => p.sku === firstIt.sku || p.name === firstIt.name);
-                                if (foundP) setSelectedProductForReview(foundP);
+                  {/* 2. Star Rating (1 to 5) */}
+                  <div style={{ background: '#FAF6F0', borderRadius: '14px', padding: '14px', border: '1px solid #FDE68A', textAlign: 'center', marginBottom: '14px' }}>
+                    <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '800', color: '#4A121E', marginBottom: '6px' }}>
+                      YOUR RATING (1 TO 5 STARS)
+                    </label>
+                    
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', margin: '8px 0' }}>
+                      {[1, 2, 3, 4, 5].map(star => (
+                        <button
+                          key={star}
+                          type="button"
+                          onClick={() => setReviewRatingInput(star)}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            fontSize: '2rem',
+                            color: star <= reviewRatingInput ? '#F59E0B' : '#D1D5DB',
+                            cursor: 'pointer',
+                            padding: '0 4px',
+                            transition: 'transform 0.15s ease'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.2)'}
+                          onMouseLeave={e => e.currentTarget.style.transform = 'scale(1.0)'}
+                        >
+                          ★
+                        </button>
+                      ))}
+                    </div>
+
+                    <div style={{ fontSize: '0.82rem', fontWeight: '800', color: '#B45309' }}>
+                      {reviewRatingInput === 5 && '⭐⭐⭐⭐⭐ Superb! Loved the cow ghee aroma & taste'}
+                      {reviewRatingInput === 4 && '⭐⭐⭐⭐ Very good & fresh'}
+                      {reviewRatingInput === 3 && '⭐⭐⭐ Good taste'}
+                      {reviewRatingInput === 2 && '⭐⭐ Average'}
+                      {reviewRatingInput === 1 && '⭐ Needs improvement'}
+                    </div>
+                  </div>
+
+                  {/* ============================================================== */}
+                  {/* CASE A: STAFF MODE REVIEW ENTRY (FOR OMS TEAM)                  */}
+                  {/* ============================================================== */}
+                  {isStaff ? (
+                    <>
+                      {/* Staff Mode: Patron Mobile Number & CRM Auto-Lookup */}
+                      <div style={{ marginBottom: '12px' }}>
+                        <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '800', color: '#065F46', marginBottom: '4px' }}>
+                          PATRON 10-DIGIT MOBILE NUMBER [OPTIONAL]
+                        </label>
+                        <input
+                          type="tel"
+                          maxLength={10}
+                          placeholder="e.g. 9845123456"
+                          value={reviewPhoneInput}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setReviewPhoneInput(val);
+                            const clean = val.replace(/\D/g, '').slice(-10);
+                            if (clean.length === 10) {
+                              const matched = orders.filter(o => (o.phone || '').replace(/\D/g, '').slice(-10) === clean);
+                              if (matched.length > 0) {
+                                if (!reviewNameInput && matched[0].name) setReviewNameInput(matched[0].name);
+                                if (!reviewOrderIdInput) {
+                                  setReviewOrderIdInput(matched[0].orderId || matched[0].id || '');
+                                  if (matched[0].items && matched[0].items.length > 0) {
+                                    const firstIt = matched[0].items[0];
+                                    const foundP = products.find(p => p.sku === firstIt.sku || p.name === firstIt.name);
+                                    if (foundP) setSelectedProductForReview(foundP);
+                                  }
+                                }
+                              } else {
+                                lookupCustomerInSupabase(clean).then(cust => {
+                                  if (cust && cust.name && !reviewNameInput) setReviewNameInput(cust.name);
+                                });
                               }
                             }
+                          }}
+                          style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #A7F3D0', fontSize: '0.9rem' }}
+                        />
+                      </div>
+
+                      {/* Staff Mode: Associated Order Dropdown */}
+                      <div style={{ marginBottom: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                          <label style={{ fontSize: '0.74rem', fontWeight: '800', color: '#065F46' }}>
+                            ASSOCIATED ORDER [OPTIONAL]
+                          </label>
+                          {reviewOrderIdInput && (
+                            <button
+                              type="button"
+                              onClick={() => setReviewOrderIdInput('')}
+                              style={{ background: 'transparent', border: 'none', color: '#B45309', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', textDecoration: 'underline' }}
+                            >
+                              Clear Order
+                            </button>
+                          )}
+                        </div>
+
+                        {(() => {
+                          const cleanP = (reviewPhoneInput || '').replace(/\D/g, '').slice(-10);
+                          const matchedOrders = cleanP.length === 10
+                            ? orders.filter(o => (o.phone || '').replace(/\D/g, '').slice(-10) === cleanP)
+                            : [];
+
+                          return (
+                            <select
+                              value={reviewOrderIdInput}
+                              onChange={(e) => {
+                                const selectedId = e.target.value;
+                                setReviewOrderIdInput(selectedId);
+                                if (selectedId) {
+                                  const foundOrder = orders.find(o => (o.orderId || o.id) === selectedId);
+                                  if (foundOrder) {
+                                    if (!reviewNameInput && foundOrder.name) setReviewNameInput(foundOrder.name);
+                                    if (!reviewPhoneInput && foundOrder.phone) setReviewPhoneInput(foundOrder.phone);
+                                    if (foundOrder.items && foundOrder.items.length > 0) {
+                                      const firstIt = foundOrder.items[0];
+                                      const foundP = products.find(p => p.sku === firstIt.sku || p.name === firstIt.name);
+                                      if (foundP) setSelectedProductForReview(foundP);
+                                    }
+                                  }
+                                }
+                              }}
+                              style={{
+                                width: '100%',
+                                boxSizing: 'border-box',
+                                padding: '9px 12px',
+                                borderRadius: '8px',
+                                border: '1px solid #CBD5E1',
+                                fontSize: '0.86rem',
+                                background: '#F0FDF4',
+                                color: '#334155'
+                              }}
+                            >
+                              <option value="">-- No Order Linked (General Tasting / In-Store) --</option>
+                              
+                              {matchedOrders.length > 0 && (
+                                <optgroup label={`Orders of ${reviewPhoneInput} (${matchedOrders.length})`}>
+                                  {matchedOrders.map(o => (
+                                    <option key={`patron-ord-${o.orderId || o.id}`} value={o.orderId || o.id}>
+                                      📦 Order #{o.orderId || o.id} • ₹{o.total} • {o.items?.map(it => it.name).join(', ') || 'Order'}
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              )}
+
+                              {orders.length > 0 && (
+                                <optgroup label="Recent Store Orders (Staff Reference)">
+                                  {orders.slice(0, 25).map(o => (
+                                    <option key={`recent-ord-${o.orderId || o.id}`} value={o.orderId || o.id}>
+                                      📦 Order #{o.orderId || o.id} - {o.name || 'Patron'} ({o.phone || 'No phone'}) - ₹{o.total}
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              )}
+                            </select>
+                          );
+                        })()}
+
+                        {reviewOrderIdInput && (
+                          <div style={{ marginTop: '4px', fontSize: '0.72rem', color: '#047857', fontWeight: '700' }}>
+                            ✓ Linked to Order #{reviewOrderIdInput}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Staff Mode: Patron Name Input */}
+                      <div style={{ marginBottom: '12px' }}>
+                        <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '800', color: '#065F46', marginBottom: '4px' }}>
+                          PATRON NAME *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Priya Sharma"
+                          value={reviewNameInput}
+                          onChange={e => setReviewNameInput(e.target.value)}
+                          style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.9rem' }}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    /* ============================================================== */
+                    /* CASE B: CUSTOMER MODE REVIEW ENTRY (STRICT PRIVACY ISOLATION)   */
+                    /* ============================================================== */
+                    <>
+                      {customerUser ? (
+                        /* Logged In Customer Profile Card */
+                        <div style={{ background: '#FAF6F0', borderRadius: '10px', padding: '10px 14px', border: '1.5px solid #FDE68A', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <div style={{ fontSize: '0.7rem', fontWeight: '800', color: '#B45309', textTransform: 'uppercase' }}>Reviewing As Patron</div>
+                            <div style={{ fontWeight: '800', color: '#4A121E', fontSize: '0.92rem' }}>{customerUser.name}</div>
+                            <div style={{ fontSize: '0.75rem', color: '#64748B' }}>📞 +91 {customerUser.phone}</div>
+                          </div>
+                          <span style={{ fontSize: '0.72rem', background: '#DEF7EC', color: '#03543F', padding: '3px 8px', borderRadius: '6px', fontWeight: '800' }}>
+                            ✓ Verified Patron
+                          </span>
+                        </div>
+                      ) : (
+                        /* Non Logged In Customer Inputs (All Optional) */
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
+                          <div>
+                            <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px' }}>
+                              YOUR NAME [OPTIONAL]
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Priya (Optional)"
+                              value={reviewNameInput}
+                              onChange={e => setReviewNameInput(e.target.value)}
+                              style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.88rem' }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px' }}>
+                              MOBILE [OPTIONAL]
+                            </label>
+                            <input
+                              type="tel"
+                              maxLength={10}
+                              placeholder="10-digit (Optional)"
+                              value={reviewPhoneInput}
+                              onChange={e => setReviewPhoneInput(e.target.value)}
+                              style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.88rem' }}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Customer Mode: Associated Order (Strict Privacy - Only shows OWN orders or text field) */}
+                      <div style={{ marginBottom: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                          <label style={{ fontSize: '0.74rem', fontWeight: '800', color: '#4A121E' }}>
+                            LINK TO YOUR ORDER [OPTIONAL]
+                          </label>
+                          {reviewOrderIdInput && (
+                            <button
+                              type="button"
+                              onClick={() => setReviewOrderIdInput('')}
+                              style={{ background: 'transparent', border: 'none', color: '#B45309', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', textDecoration: 'underline' }}
+                            >
+                              Clear Order
+                            </button>
+                          )}
+                        </div>
+
+                        {(() => {
+                          // Strict filter: ONLY orders matching the logged in customer's phone
+                          const userPhone = customerUser ? (customerUser.phone || '').replace(/\D/g, '').slice(-10) : '';
+                          const myOrders = userPhone.length === 10
+                            ? orders.filter(o => (o.phone || '').replace(/\D/g, '').slice(-10) === userPhone)
+                            : [];
+
+                          if (myOrders.length > 0) {
+                            return (
+                              <select
+                                value={reviewOrderIdInput}
+                                onChange={(e) => {
+                                  const selectedId = e.target.value;
+                                  setReviewOrderIdInput(selectedId);
+                                  if (selectedId) {
+                                    const foundOrder = myOrders.find(o => (o.orderId || o.id) === selectedId);
+                                    if (foundOrder && foundOrder.items && foundOrder.items.length > 0) {
+                                      const firstIt = foundOrder.items[0];
+                                      const matchingProd = products.find(p => p.sku === firstIt.sku || p.name === firstIt.name);
+                                      if (matchingProd) setSelectedProductForReview(matchingProd);
+                                    }
+                                  }
+                                }}
+                                style={{
+                                  width: '100%',
+                                  boxSizing: 'border-box',
+                                  padding: '9px 12px',
+                                  borderRadius: '8px',
+                                  border: '1px solid #CBD5E1',
+                                  fontSize: '0.86rem',
+                                  background: '#FAF6F0',
+                                  color: '#334155'
+                                }}
+                              >
+                                <option value="">-- No Order Linked (General Tasting / In-Store) --</option>
+                                {myOrders.map(o => (
+                                  <option key={`my-ord-${o.orderId || o.id}`} value={o.orderId || o.id}>
+                                    📦 Order #{o.orderId || o.id} • ₹{o.total} • {o.items?.map(it => it.name).join(', ') || 'Laddus'}
+                                  </option>
+                                ))}
+                              </select>
+                            );
                           }
-                        }}
-                        style={{
-                          width: '100%',
-                          boxSizing: 'border-box',
-                          padding: '9px 12px',
-                          borderRadius: '8px',
-                          border: '1px solid #CBD5E1',
-                          fontSize: '0.86rem',
-                          background: '#FAF6F0',
-                          color: '#334155'
-                        }}
-                      >
-                        <option value="">-- No Order Linked (General Tasting / In-Store) --</option>
-                        
-                        {patronOrders.length > 0 && (
-                          <optgroup label={`Orders of ${reviewPhoneInput || (customerUser ? customerUser.phone : 'Patron')} (${patronOrders.length})`}>
-                            {patronOrders.map(o => (
-                              <option key={`patron-ord-${o.orderId || o.id}`} value={o.orderId || o.id}>
-                                📦 Order #{o.orderId || o.id} • ₹{o.total} • {o.items?.map(it => it.name).join(', ') || 'Order'}
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
 
-                        {(adminSection === 'reviews' || isStaffRoute || patronOrders.length === 0) && orders.length > 0 && (
-                          <optgroup label="Recent Store Orders">
-                            {orders.slice(0, 20).map(o => (
-                              <option key={`recent-ord-${o.orderId || o.id}`} value={o.orderId || o.id}>
-                                📦 Order #{o.orderId || o.id} - {o.name || 'Patron'} ({o.phone || 'No phone'}) - ₹{o.total}
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
-                      </select>
-                    );
-                  })()}
+                          // If not logged in or no past orders found: show clean optional Order ID input (NO OTHER ORDERS EVER SHOWN)
+                          return (
+                            <input
+                              type="text"
+                              placeholder="e.g. TLS-20261028-1234 (optional from receipt/WhatsApp)"
+                              value={reviewOrderIdInput}
+                              onChange={e => setReviewOrderIdInput(e.target.value)}
+                              style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.86rem', background: '#FAF6F0' }}
+                            />
+                          );
+                        })()}
 
-                  {reviewOrderIdInput && (
-                    <div style={{ marginTop: '4px', fontSize: '0.72rem', color: '#047857', fontWeight: '700' }}>
-                      ✓ Linked to Order #{reviewOrderIdInput}
-                    </div>
+                        {reviewOrderIdInput && (
+                          <div style={{ marginTop: '4px', fontSize: '0.72rem', color: '#047857', fontWeight: '700' }}>
+                            ✓ Linked to Order #{reviewOrderIdInput}
+                          </div>
+                        )}
+                      </div>
+                    </>
                   )}
-                </div>
 
-                {/* 5. Patron Name Input */}
-                <div style={{ marginBottom: '12px' }}>
-                  <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px' }}>
-                    PATRON NAME *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Priya Sharma"
-                    value={reviewNameInput || (customerUser ? customerUser.name : '')}
-                    onChange={e => setReviewNameInput(e.target.value)}
-                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.9rem' }}
-                  />
-                </div>
+                  {/* Tasting Notes / Review Comments */}
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px' }}>
+                      TASTING NOTES / REVIEW COMMENTS [OPTIONAL]
+                    </label>
+                    <textarea
+                      rows={3}
+                      placeholder="Tell us what you loved about the cow ghee richness, natural jaggery sweetness, or crunch..."
+                      value={reviewCommentInput}
+                      onChange={e => setReviewCommentInput(e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.88rem' }}
+                    />
+                  </div>
 
-                {/* 6. Tasting Comments */}
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px' }}>
-                    TASTING NOTES / REVIEW COMMENTS [OPTIONAL]
-                  </label>
-                  <textarea
-                    rows={3}
-                    placeholder="Tell us what you loved about the cow ghee richness, natural jaggery sweetness, or crunch..."
-                    value={reviewCommentInput}
-                    onChange={e => setReviewCommentInput(e.target.value)}
-                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.88rem' }}
-                  />
-                </div>
+                  {/* Submit & Cancel Action Buttons */}
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button
+                      type="submit"
+                      disabled={isSubmittingReview}
+                      style={{
+                        flex: 1,
+                        background: isStaff 
+                          ? 'linear-gradient(135deg, #059669 0%, #047857 100%)' 
+                          : 'linear-gradient(135deg, #4A121E 0%, #831843 100%)',
+                        color: '#fff',
+                        border: 'none',
+                        padding: '12px',
+                        borderRadius: '8px',
+                        fontWeight: '800',
+                        fontSize: '0.92rem',
+                        cursor: isSubmittingReview ? 'not-allowed' : 'pointer'
+                      }}
+                    >
+                      {isSubmittingReview 
+                        ? 'Submitting Review...' 
+                        : (isStaff ? '⭐ Submit Review on Behalf of Patron' : '⭐ Submit Honest Review')}
+                    </button>
 
-                {/* 7. Action Buttons */}
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <button
-                    type="submit"
-                    disabled={isSubmittingReview}
-                    style={{
-                      flex: 1,
-                      background: 'linear-gradient(135deg, #4A121E 0%, #831843 100%)',
-                      color: '#fff',
-                      border: 'none',
-                      padding: '12px',
-                      borderRadius: '8px',
-                      fontWeight: '800',
-                      fontSize: '0.92rem',
-                      cursor: isSubmittingReview ? 'not-allowed' : 'pointer'
-                    }}
-                  >
-                    {isSubmittingReview ? 'Submitting Review...' : '⭐ Submit Honest Review'}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setSelectedProductForReview(null)}
-                    style={{ background: '#FAF6F0', border: '1px solid #E2E8F0', padding: '12px 14px', borderRadius: '8px', fontWeight: '700', color: '#64748B', cursor: 'pointer' }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedProductForReview(null);
+                        setIsStaffReviewMode(false);
+                      }}
+                      style={{ background: '#FAF6F0', border: '1px solid #E2E8F0', padding: '12px 14px', borderRadius: '8px', fontWeight: '700', color: '#64748B', cursor: 'pointer' }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Invisible Google reCAPTCHA Container for Firebase Phone Auth */}
       
