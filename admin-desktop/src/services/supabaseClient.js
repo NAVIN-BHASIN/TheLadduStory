@@ -448,9 +448,9 @@ export const deleteOrderInSupabase = async (orderId) => {
 };
 
 /**
- * Subscribe to real-time changes via WebSockets for orders, products, and customers
+ * Subscribe to real-time changes via WebSockets for orders, products, customers, and product_reviews
  */
-export const subscribeToSupabaseRealtime = (onOrderChange, onProductChange, onCustomerChange) => {
+export const subscribeToSupabaseRealtime = (onOrderChange, onProductChange, onCustomerChange, onReviewChange) => {
   if (!supabaseInstance) return () => {};
 
   try {
@@ -464,6 +464,9 @@ export const subscribeToSupabaseRealtime = (onOrderChange, onProductChange, onCu
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, (payload) => {
         if (onCustomerChange) onCustomerChange(payload);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'product_reviews' }, (payload) => {
+        if (onReviewChange) onReviewChange(payload);
       })
       .subscribe();
 
@@ -765,22 +768,48 @@ export const fetchReviewsFromSupabase = async () => {
 export const insertReviewToSupabase = async (review) => {
   if (!supabaseInstance) return { success: false, reason: 'NOT_CONFIGURED' };
   try {
+    const sku = review.productSku || review.product_sku || '';
+    const name = review.productName || review.product_name || '';
+    const patronName = review.customerName || review.customer_name || 'Valued Patron';
+    const patronPhone = review.customerPhone || review.customer_phone || '';
+    const ratingNum = Number(review.rating) || 5;
+    const commentText = review.comment || '';
+    const orderIdVal = review.orderId || review.order_id || '';
+
+    const payload = {
+      product_sku: sku,
+      product_name: name,
+      rating: ratingNum,
+      customer_name: patronName,
+      customer_phone: patronPhone,
+      comment: commentText,
+      order_id: orderIdVal
+    };
+
     const { data, error } = await supabaseInstance
       .from('product_reviews')
-      .insert({
-        product_sku: review.productSku,
-        product_name: review.productName,
-        rating: review.rating,
-        customer_name: review.customerName,
-        customer_phone: review.customerPhone || '',
-        comment: review.comment || '',
-        order_id: review.orderId || ''
-      })
+      .insert(payload)
       .select()
       .maybeSingle();
 
-    if (error) throw error;
-    return { success: true, data };
+    if (error) {
+      console.error('[Supabase] insertReview error:', error);
+      return { success: false, error: error.message };
+    }
+
+    const formattedReview = {
+      id: data?.id || `rev-${Date.now()}`,
+      productSku: data?.product_sku || sku,
+      productName: data?.product_name || name,
+      rating: Number(data?.rating || ratingNum),
+      customerName: data?.customer_name || patronName,
+      customerPhone: data?.customer_phone || patronPhone,
+      comment: data?.comment || commentText,
+      orderId: data?.order_id || orderIdVal,
+      createdAt: data?.created_at || new Date().toISOString()
+    };
+
+    return { success: true, data: formattedReview, review: formattedReview };
   } catch (err) {
     console.error('[Supabase] insertReview error:', err);
     return { success: false, error: err.message };

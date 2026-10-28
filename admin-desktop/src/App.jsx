@@ -858,6 +858,19 @@ export default function App() {
               return curr;
             });
           }
+        },
+        (reviewPayload) => {
+          fetchReviewsFromSupabase().then(latestReviews => {
+            if (latestReviews && latestReviews.length > 0) {
+              setReviews(prev => {
+                const map = new Map();
+                SEED_REVIEWS.forEach(r => map.set(r.id, r));
+                prev.forEach(r => map.set(r.id, r));
+                latestReviews.forEach(r => map.set(r.id, r));
+                return Array.from(map.values());
+              });
+            }
+          });
         }
       );
     }
@@ -882,6 +895,11 @@ export default function App() {
               });
               setIsCloudSynced(true);
               setLastSyncTime(new Date().toLocaleTimeString());
+            } else if (msg.type === 'NEW_REVIEW' && msg.review) {
+              setReviews(prev => {
+                if (prev.some(r => r.id === msg.review.id)) return prev;
+                return [msg.review, ...prev];
+              });
             }
           }
         } catch(err) {}
@@ -896,6 +914,17 @@ export default function App() {
             setOrders(latestOrders);
           }
         });
+        fetchReviewsFromSupabase().then(dbReviews => {
+          if (dbReviews && dbReviews.length > 0) {
+            setReviews(prev => {
+              const map = new Map();
+              SEED_REVIEWS.forEach(r => map.set(r.id, r));
+              prev.forEach(r => map.set(r.id, r));
+              dbReviews.forEach(r => map.set(r.id, r));
+              return Array.from(map.values());
+            });
+          }
+        });
       }
     }, 10000);
 
@@ -904,6 +933,17 @@ export default function App() {
         fetchOrdersFromSupabase().then(latestOrders => {
           if (latestOrders && latestOrders.length > 0) {
             setOrders(latestOrders);
+          }
+        });
+        fetchReviewsFromSupabase().then(dbReviews => {
+          if (dbReviews && dbReviews.length > 0) {
+            setReviews(prev => {
+              const map = new Map();
+              SEED_REVIEWS.forEach(r => map.set(r.id, r));
+              prev.forEach(r => map.set(r.id, r));
+              dbReviews.forEach(r => map.set(r.id, r));
+              return Array.from(map.values());
+            });
           }
         });
       }
@@ -1579,30 +1619,48 @@ export default function App() {
     setIsSubmittingReview(true);
     try {
       const reviewObj = {
+        productSku: selectedProductForReview.sku,
+        productName: selectedProductForReview.name,
         product_sku: selectedProductForReview.sku,
         product_name: selectedProductForReview.name,
         rating: reviewRatingInput,
+        customerName: authorName,
         customer_name: authorName,
+        customerPhone: authorPhone,
         customer_phone: authorPhone,
         comment: reviewCommentInput.trim()
       };
 
       const result = await insertReviewToSupabase(reviewObj);
-      const savedReview = (result && result.review) ? result.review : {
-        ...reviewObj,
+      const savedReview = (result && result.success && result.review) ? result.review : {
         id: `rev-${Date.now()}`,
         productSku: selectedProductForReview.sku,
         productName: selectedProductForReview.name,
+        rating: reviewRatingInput,
         customerName: authorName,
         customerPhone: authorPhone,
+        comment: reviewCommentInput.trim(),
         createdAt: new Date().toISOString()
       };
 
-      const updated = [savedReview, ...reviews];
+      const updated = [savedReview, ...reviews.filter(r => r.id !== savedReview.id)];
       setReviews(updated);
       try {
         localStorage.setItem('tls_reviews_db', JSON.stringify(updated));
       } catch(e) {}
+
+      // Broadcast review to all devices via Realtime topic
+      try {
+        fetch(REALTIME_TOPIC_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'NEW_REVIEW',
+            review: savedReview,
+            timestamp: new Date().toISOString()
+          })
+        });
+      } catch (err) {}
 
       setReviewSuccessMsg('Thank you for sharing your love for our pure cow ghee laddus! ⭐');
       setTimeout(() => {

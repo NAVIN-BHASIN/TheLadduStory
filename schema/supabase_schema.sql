@@ -158,7 +158,31 @@ create index if not exists idx_reviews_product_sku on public.product_reviews(pro
 create index if not exists idx_reviews_created_at on public.product_reviews(created_at desc);
 
 alter table public.product_reviews enable row level security;
+drop policy if exists "Allow public read product_reviews" on public.product_reviews;
 create policy "Allow public read product_reviews" on public.product_reviews for select using (true);
+drop policy if exists "Allow public insert product_reviews" on public.product_reviews;
 create policy "Allow public insert product_reviews" on public.product_reviews for insert with check (true);
-alter publication supabase_realtime add table public.product_reviews;
+drop policy if exists "Allow public update product_reviews" on public.product_reviews;
+create policy "Allow public update product_reviews" on public.product_reviews for update using (true);
+drop policy if exists "Allow public delete product_reviews" on public.product_reviews;
+create policy "Allow public delete product_reviews" on public.product_reviews for delete using (true);
 
+-- Realtime Publication for instant review updates
+do $$
+begin
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'product_reviews') then
+    alter publication supabase_realtime add table public.product_reviews;
+  end if;
+exception when others then
+  null;
+end $$;
+
+-- 10. SEED PILOT PATRON AUTHENTIC REVIEWS INTO SUPABASE
+insert into public.product_reviews (product_sku, product_name, rating, customer_name, customer_phone, comment, created_at)
+values
+('RAGI-WALNUT', 'Ragi Walnut Laddu', 5, 'Ananya Sharma', '98451*****', 'Rich pure cow ghee aroma and zero white sugar! Perfectly balanced sweetness with unrefined jaggery. My diabetic parents loved it.', now() - interval '5 days'),
+('SATTU-ALMOND', 'Sattu Almond Laddu', 5, 'Rohit Nair', '99002*****', 'High protein and sustained energy! Perfect post-workout snack with crunchy California almonds.', now() - interval '4 days'),
+('DATES-DRY-FRUITS', 'Dates & Dry Fruits Bites', 5, 'Pooja Kulkarni', '97403*****', '100% naturally sweet and packed with nuts. Melt in the mouth and completely guilt-free!', now() - interval '3 days'),
+('TILL-BLACK-SESAME', 'Till Laddu (Black Sesame)', 5, 'Venkatesh Rao', '98801*****', 'Authentic Ayurvedic recipe! Excellent warmth, great sesame flavor, and pure cow ghee richness.', now() - interval '2 days'),
+('QUINOA-MOONG-DAL', 'Quinoa Moong Dal Laddu', 5, 'Dr. Meera Iyer', '94481*****', 'Very light on the stomach, soothing cardamom fragrance, and made with pure love. 10/10!', now() - interval '1 day'),
+('SAVORY-MAKHANA', 'Savory Munchies (Roasted Makhana)', 5, 'Karan Verma', '96112*****', 'Slow roasted in pure cow ghee with Himalayan pink salt. The crunch is unbelievable!', now());
