@@ -400,69 +400,8 @@ const CATALOG_GALLERY_IMAGES = [
   { name: 'Savory Murmura', file: 'images/products/SAVORY-MURMURA.jpg' }
 ];
 
-// AUTHENTIC SEED REVIEWS & RATINGS FROM PILOT PATRONS
-const SEED_REVIEWS = [
-  {
-    id: 'rev-01',
-    productSku: 'RAGI-WALNUT',
-    productName: 'Ragi Walnut Laddu',
-    rating: 5,
-    customerName: 'Ananya Sharma',
-    customerPhone: '98451*****',
-    comment: 'Rich pure cow ghee aroma and zero white sugar! Perfectly balanced sweetness with unrefined jaggery. My diabetic parents loved it.',
-    createdAt: new Date(Date.now() - 86400000 * 5).toISOString()
-  },
-  {
-    id: 'rev-02',
-    productSku: 'SATTU-ALMOND',
-    productName: 'Sattu Almond Laddu',
-    rating: 5,
-    customerName: 'Rohit Nair',
-    customerPhone: '99002*****',
-    comment: 'High protein and sustained energy! Perfect post-workout snack with crunchy California almonds.',
-    createdAt: new Date(Date.now() - 86400000 * 4).toISOString()
-  },
-  {
-    id: 'rev-03',
-    productSku: 'DATES-DRY-FRUITS',
-    productName: 'Dates & Dry Fruits Bites',
-    rating: 5,
-    customerName: 'Pooja Kulkarni',
-    customerPhone: '97403*****',
-    comment: '100% naturally sweet and packed with nuts. Melt in the mouth and completely guilt-free!',
-    createdAt: new Date(Date.now() - 86400000 * 3).toISOString()
-  },
-  {
-    id: 'rev-04',
-    productSku: 'TILL-BLACK-SESAME',
-    productName: 'Till Laddu (Black Sesame)',
-    rating: 5,
-    customerName: 'Venkatesh Rao',
-    customerPhone: '98801*****',
-    comment: 'Authentic Ayurvedic recipe! Excellent warmth, great sesame flavor, and pure cow ghee richness.',
-    createdAt: new Date(Date.now() - 86400000 * 2).toISOString()
-  },
-  {
-    id: 'rev-05',
-    productSku: 'QUINOA-MOONG-DAL',
-    productName: 'Quinoa Moong Dal Laddu',
-    rating: 5,
-    customerName: 'Dr. Meera Iyer',
-    customerPhone: '94481*****',
-    comment: 'Very light on the stomach, soothing cardamom fragrance, and made with pure love. 10/10!',
-    createdAt: new Date(Date.now() - 86400000 * 1).toISOString()
-  },
-  {
-    id: 'rev-06',
-    productSku: 'SAVORY-MAKHANA',
-    productName: 'Savory Munchies (Roasted Makhana)',
-    rating: 5,
-    customerName: 'Karan Verma',
-    customerPhone: '96112*****',
-    comment: 'Slow roasted in pure cow ghee with Himalayan pink salt. The crunch is unbelievable!',
-    createdAt: new Date().toISOString()
-  }
-];
+// Product Reviews & Ratings (Loaded strictly from Supabase Database)
+const SEED_REVIEWS = [];
 
 export default function App() {
   // Navigation & View State
@@ -625,22 +564,30 @@ export default function App() {
   const [isStaffSubmittingOrder, setIsStaffSubmittingOrder] = useState(false);
   const [staffOrderCreatedSuccess, setStaffOrderCreatedSuccess] = useState(null);
 
-  // Product Reviews & Ratings State
+  // Product Reviews & Ratings State (Strictly sourced from Supabase Database)
   const [reviews, setReviews] = useState(() => {
     try {
-      const saved = localStorage.getItem('tls_reviews_db');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      const ver = localStorage.getItem('tls_reviews_cache_ver');
+      if (ver === 'v6_db_pure_strict') {
+        const saved = localStorage.getItem('tls_reviews_db');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) return parsed;
+        }
+      } else {
+        localStorage.removeItem('tls_reviews_db');
+        localStorage.removeItem('tls_customer_reviews');
+        localStorage.setItem('tls_reviews_cache_ver', 'v6_db_pure_strict');
       }
     } catch (e) {}
-    return SEED_REVIEWS;
+    return [];
   });
   const [selectedProductForReview, setSelectedProductForReview] = useState(null);
   const [reviewRatingInput, setReviewRatingInput] = useState(5);
   const [reviewNameInput, setReviewNameInput] = useState('');
   const [reviewPhoneInput, setReviewPhoneInput] = useState('');
   const [reviewCommentInput, setReviewCommentInput] = useState('');
+  const [reviewOrderIdInput, setReviewOrderIdInput] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [reviewSuccessMsg, setReviewSuccessMsg] = useState('');
   const [reviewProductFilter, setReviewProductFilter] = useState('ALL');
@@ -789,14 +736,11 @@ export default function App() {
       });
 
       fetchReviewsFromSupabase().then(dbReviews => {
-        if (dbReviews && dbReviews.length > 0) {
-          setReviews(prev => {
-            const map = new Map();
-            SEED_REVIEWS.forEach(r => map.set(r.id, r));
-            prev.forEach(r => map.set(r.id, r));
-            dbReviews.forEach(r => map.set(r.id, r));
-            return Array.from(map.values());
-          });
+        if (dbReviews) {
+          setReviews(dbReviews);
+          try {
+            localStorage.setItem('tls_reviews_db', JSON.stringify(dbReviews));
+          } catch(e) {}
         }
       });
 
@@ -860,15 +804,12 @@ export default function App() {
           }
         },
         (reviewPayload) => {
-          fetchReviewsFromSupabase().then(latestReviews => {
-            if (latestReviews && latestReviews.length > 0) {
-              setReviews(prev => {
-                const map = new Map();
-                SEED_REVIEWS.forEach(r => map.set(r.id, r));
-                prev.forEach(r => map.set(r.id, r));
-                latestReviews.forEach(r => map.set(r.id, r));
-                return Array.from(map.values());
-              });
+          fetchReviewsFromSupabase().then(dbReviews => {
+            if (dbReviews) {
+              setReviews(dbReviews);
+              try {
+                localStorage.setItem('tls_reviews_db', JSON.stringify(dbReviews));
+              } catch(e) {}
             }
           });
         }
@@ -915,14 +856,11 @@ export default function App() {
           }
         });
         fetchReviewsFromSupabase().then(dbReviews => {
-          if (dbReviews && dbReviews.length > 0) {
-            setReviews(prev => {
-              const map = new Map();
-              SEED_REVIEWS.forEach(r => map.set(r.id, r));
-              prev.forEach(r => map.set(r.id, r));
-              dbReviews.forEach(r => map.set(r.id, r));
-              return Array.from(map.values());
-            });
+          if (dbReviews) {
+            setReviews(dbReviews);
+            try {
+              localStorage.setItem('tls_reviews_db', JSON.stringify(dbReviews));
+            } catch(e) {}
           }
         });
       }
@@ -936,14 +874,11 @@ export default function App() {
           }
         });
         fetchReviewsFromSupabase().then(dbReviews => {
-          if (dbReviews && dbReviews.length > 0) {
-            setReviews(prev => {
-              const map = new Map();
-              SEED_REVIEWS.forEach(r => map.set(r.id, r));
-              prev.forEach(r => map.set(r.id, r));
-              dbReviews.forEach(r => map.set(r.id, r));
-              return Array.from(map.values());
-            });
+          if (dbReviews) {
+            setReviews(dbReviews);
+            try {
+              localStorage.setItem('tls_reviews_db', JSON.stringify(dbReviews));
+            } catch(e) {}
           }
         });
       }
@@ -1628,7 +1563,9 @@ export default function App() {
         customer_name: authorName,
         customerPhone: authorPhone,
         customer_phone: authorPhone,
-        comment: reviewCommentInput.trim()
+        comment: reviewCommentInput.trim(),
+        orderId: reviewOrderIdInput.trim(),
+        order_id: reviewOrderIdInput.trim()
       };
 
       const result = await insertReviewToSupabase(reviewObj);
@@ -1640,6 +1577,7 @@ export default function App() {
         customerName: authorName,
         customerPhone: authorPhone,
         comment: reviewCommentInput.trim(),
+        orderId: reviewOrderIdInput.trim(),
         createdAt: new Date().toISOString()
       };
 
@@ -1668,6 +1606,9 @@ export default function App() {
         setSelectedProductForReview(null);
         setReviewCommentInput('');
         setReviewRatingInput(5);
+        setReviewOrderIdInput('');
+        setReviewNameInput('');
+        setReviewPhoneInput('');
       }, 1800);
     } catch (err) {
       alert('Error saving review: ' + err.message);
@@ -2727,6 +2668,7 @@ export default function App() {
                                     setSelectedProductForReview(product);
                                     setReviewRatingInput(5);
                                     setReviewCommentInput('');
+                                    setReviewOrderIdInput('');
                                     setReviewSuccessMsg('');
                                     if (customerUser) {
                                       setReviewNameInput(customerUser.name || '');
@@ -3067,9 +3009,20 @@ export default function App() {
                               onClick={() => {
                                 const firstItem = o.items && o.items[0];
                                 const prod = firstItem 
-                                  ? (products.find(p => p.sku === firstItem.sku || p.name === firstItem.name) || { sku: firstItem.sku || 'general', name: firstItem.name })
+                                  ? (products.find(p => p.sku === firstItem.sku || p.name === firstItem.name) || { sku: firstItem.sku || 'general', name: firstItem.name, image: 'images/TheLadduStory_Logo.jpg' })
                                   : products[0];
                                 setSelectedProductForReview(prod);
+                                setReviewOrderIdInput(o.orderId || o.id || '');
+                                setReviewRatingInput(5);
+                                setReviewCommentInput('');
+                                setReviewSuccessMsg('');
+                                if (customerUser) {
+                                  setReviewNameInput(customerUser.name || '');
+                                  setReviewPhoneInput(customerUser.phone || '');
+                                } else {
+                                  if (o.name) setReviewNameInput(o.name);
+                                  if (o.phone) setReviewPhoneInput(o.phone);
+                                }
                               }}
                               style={{ background: '#FFFBEB', border: '1px solid #FDE68A', padding: '6px 14px', borderRadius: '6px', fontWeight: '700', fontSize: '0.8rem', color: '#92400E', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
                             >
@@ -4261,6 +4214,8 @@ export default function App() {
                         setReviewNameInput('');
                         setReviewPhoneInput('');
                         setReviewCommentInput('');
+                        setReviewOrderIdInput('');
+                        setReviewSuccessMsg('');
                       }}
                       style={{
                         background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
@@ -4399,10 +4354,15 @@ export default function App() {
                               </span>
                             </div>
 
-                            <div style={{ marginBottom: '10px' }}>
+                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '10px' }}>
                               <span style={{ display: 'inline-block', background: '#FAF6F0', border: '1px solid #E2E8F0', color: '#831843', padding: '3px 8px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: '800' }}>
                                 🥣 {prodName}
                               </span>
+                              {(r.orderId || r.order_id) && (
+                                <span style={{ display: 'inline-block', background: '#ECFDF5', border: '1px solid #A7F3D0', color: '#065F46', padding: '3px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: '700' }}>
+                                  📦 Order #{r.orderId || r.order_id}
+                                </span>
+                              )}
                             </div>
 
                             <div style={{ fontSize: '0.85rem', color: '#334155', fontStyle: 'italic', lineHeight: 1.45, marginBottom: '12px', flex: 1 }}>
@@ -6678,7 +6638,7 @@ export default function App() {
       {/* ------------------------------------------------------------- */}
       {selectedProductForReview && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(53, 11, 21, 0.75)', backdropFilter: 'blur(4px)', zIndex: 1260, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
-          <div style={{ background: '#FFFFFF', borderRadius: '22px', padding: '26px', maxWidth: '480px', width: '100%', border: '2px solid #FDE68A', boxShadow: '0 16px 45px rgba(0,0,0,0.35)', position: 'relative' }}>
+          <div style={{ background: '#FFFFFF', borderRadius: '22px', padding: '26px', maxWidth: '480px', width: '100%', maxHeight: '92vh', overflowY: 'auto', border: '2px solid #FDE68A', boxShadow: '0 16px 45px rgba(0,0,0,0.35)', position: 'relative' }}>
             
             <button
               onClick={() => {
@@ -6693,16 +6653,16 @@ export default function App() {
             {/* Header with Product Preview */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
               <img
-                src={selectedProductForReview.image}
+                src={selectedProductForReview.image || 'images/TheLadduStory_Logo.jpg'}
                 alt={selectedProductForReview.name}
-                style={{ width: '56px', height: '56px', borderRadius: '12px', objectFit: 'cover', border: '1px solid #FDE68A' }}
+                style={{ width: '56px', height: '56px', borderRadius: '12px', objectFit: 'cover', border: '1px solid #FDE68A', flexShrink: 0 }}
                 onError={e => { e.target.src = 'images/TheLadduStory_Logo.jpg'; }}
               />
-              <div>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ fontSize: '0.72rem', fontWeight: '800', color: '#B45309', textTransform: 'uppercase' }}>
                   Artisanal Tasting Review
                 </span>
-                <h3 className="royal-title" style={{ fontSize: '1.25rem', fontWeight: '800', color: '#4A121E', margin: '2px 0 0' }}>
+                <h3 className="royal-title" style={{ fontSize: '1.25rem', fontWeight: '800', color: '#4A121E', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {selectedProductForReview.name}
                 </h3>
               </div>
@@ -6718,8 +6678,43 @@ export default function App() {
               </div>
             ) : (
               <form onSubmit={handleSubmitReview}>
-                {/* 1 to 5 Star Rating Picker */}
-                <div style={{ background: '#FAF6F0', borderRadius: '14px', padding: '14px', border: '1px solid #FDE68A', textAlign: 'center', marginBottom: '16px' }}>
+                {/* 1. Item / SKU Selector Dropdown */}
+                <div style={{ marginBottom: '14px' }}>
+                  <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px' }}>
+                    SELECT ITEM / SKU FOR REVIEW *
+                  </label>
+                  <select
+                    value={selectedProductForReview.sku}
+                    onChange={(e) => {
+                      const targetSku = e.target.value;
+                      const found = products.find(p => p.sku === targetSku);
+                      if (found) {
+                        setSelectedProductForReview(found);
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      border: '1.5px solid #FDE68A',
+                      background: '#FFFDF9',
+                      fontSize: '0.9rem',
+                      fontWeight: '700',
+                      color: '#4A121E',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {products.map(p => (
+                      <option key={p.sku} value={p.sku}>
+                        🥣 {p.name} ({p.sku})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 2. Star Rating (1 to 5) */}
+                <div style={{ background: '#FAF6F0', borderRadius: '14px', padding: '14px', border: '1px solid #FDE68A', textAlign: 'center', marginBottom: '14px' }}>
                   <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '800', color: '#4A121E', marginBottom: '6px' }}>
                     YOUR RATING (1 TO 5 STARS)
                   </label>
@@ -6756,10 +6751,132 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Patron Name Input */}
+                {/* 3. Patron Mobile Number & Auto-Lookup */}
                 <div style={{ marginBottom: '12px' }}>
                   <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px' }}>
-                    YOUR NAME *
+                    10-DIGIT MOBILE NUMBER [OPTIONAL]
+                  </label>
+                  <input
+                    type="tel"
+                    maxLength={10}
+                    placeholder="e.g. 9845123456"
+                    value={reviewPhoneInput || (customerUser ? customerUser.phone : '')}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setReviewPhoneInput(val);
+                      const clean = val.replace(/\D/g, '').slice(-10);
+                      if (clean.length === 10) {
+                        const matched = orders.filter(o => (o.phone || '').replace(/\D/g, '').slice(-10) === clean);
+                        if (matched.length > 0) {
+                          if (!reviewNameInput && matched[0].name) setReviewNameInput(matched[0].name);
+                          if (!reviewOrderIdInput) {
+                            setReviewOrderIdInput(matched[0].orderId || matched[0].id || '');
+                            if (matched[0].items && matched[0].items.length > 0) {
+                              const firstIt = matched[0].items[0];
+                              const foundP = products.find(p => p.sku === firstIt.sku || p.name === firstIt.name);
+                              if (foundP) setSelectedProductForReview(foundP);
+                            }
+                          }
+                        } else {
+                          lookupCustomerInSupabase(clean).then(cust => {
+                            if (cust && cust.name && !reviewNameInput) setReviewNameInput(cust.name);
+                          });
+                        }
+                      }
+                    }}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.9rem' }}
+                  />
+                </div>
+
+                {/* 4. Associated Order Dropdown [Optional] */}
+                <div style={{ marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <label style={{ fontSize: '0.74rem', fontWeight: '800', color: '#4A121E' }}>
+                      ASSOCIATED ORDER [OPTIONAL]
+                    </label>
+                    {reviewOrderIdInput && (
+                      <button
+                        type="button"
+                        onClick={() => setReviewOrderIdInput('')}
+                        style={{ background: 'transparent', border: 'none', color: '#B45309', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', textDecoration: 'underline' }}
+                      >
+                        Clear Order
+                      </button>
+                    )}
+                  </div>
+
+                  {(() => {
+                    const activeCleanPhone = (reviewPhoneInput || (customerUser ? customerUser.phone : '') || '').replace(/\D/g, '').slice(-10);
+                    const patronOrders = activeCleanPhone.length === 10
+                      ? orders.filter(o => (o.phone || '').replace(/\D/g, '').slice(-10) === activeCleanPhone)
+                      : (customerUser ? orders.filter(o => (o.phone || '').replace(/\D/g, '').slice(-10) === (customerUser.phone || '').replace(/\D/g, '').slice(-10)) : []);
+
+                    return (
+                      <select
+                        value={reviewOrderIdInput}
+                        onChange={(e) => {
+                          const selectedId = e.target.value;
+                          setReviewOrderIdInput(selectedId);
+                          if (selectedId) {
+                            const foundOrder = orders.find(o => (o.orderId || o.id) === selectedId);
+                            if (foundOrder) {
+                              if (!reviewNameInput && foundOrder.name) setReviewNameInput(foundOrder.name);
+                              if (!reviewPhoneInput && foundOrder.phone) setReviewPhoneInput(foundOrder.phone);
+                              if (foundOrder.items && foundOrder.items.length > 0) {
+                                const firstIt = foundOrder.items[0];
+                                const foundP = products.find(p => p.sku === firstIt.sku || p.name === firstIt.name);
+                                if (foundP) setSelectedProductForReview(foundP);
+                              }
+                            }
+                          }
+                        }}
+                        style={{
+                          width: '100%',
+                          boxSizing: 'border-box',
+                          padding: '9px 12px',
+                          borderRadius: '8px',
+                          border: '1px solid #CBD5E1',
+                          fontSize: '0.86rem',
+                          background: '#FAF6F0',
+                          color: '#334155'
+                        }}
+                      >
+                        <option value="">-- No Order Linked (General Tasting / In-Store) --</option>
+                        
+                        {patronOrders.length > 0 && (
+                          <optgroup label={`Orders of ${reviewPhoneInput || (customerUser ? customerUser.phone : 'Patron')} (${patronOrders.length})`}>
+                            {patronOrders.map(o => (
+                              <option key={`patron-ord-${o.orderId || o.id}`} value={o.orderId || o.id}>
+                                📦 Order #{o.orderId || o.id} • ₹{o.total} • {o.items?.map(it => it.name).join(', ') || 'Order'}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+
+                        {(adminSection === 'reviews' || isStaffRoute || patronOrders.length === 0) && orders.length > 0 && (
+                          <optgroup label="Recent Store Orders">
+                            {orders.slice(0, 20).map(o => (
+                              <option key={`recent-ord-${o.orderId || o.id}`} value={o.orderId || o.id}>
+                                📦 Order #{o.orderId || o.id} - {o.name || 'Patron'} ({o.phone || 'No phone'}) - ₹{o.total}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </select>
+                    );
+                  })()}
+
+                  {reviewOrderIdInput && (
+                    <div style={{ marginTop: '4px', fontSize: '0.72rem', color: '#047857', fontWeight: '700' }}>
+                      ✓ Linked to Order #{reviewOrderIdInput}
+                    </div>
+                  )}
+                </div>
+
+                {/* 5. Patron Name Input */}
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px' }}>
+                    PATRON NAME *
                   </label>
                   <input
                     type="text"
@@ -6771,22 +6888,7 @@ export default function App() {
                   />
                 </div>
 
-                {/* Patron Mobile Number (Optional) */}
-                <div style={{ marginBottom: '12px' }}>
-                  <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px' }}>
-                    10-DIGIT MOBILE NUMBER [OPTIONAL]
-                  </label>
-                  <input
-                    type="tel"
-                    maxLength={10}
-                    placeholder="e.g. 9845123456"
-                    value={reviewPhoneInput || (customerUser ? customerUser.phone : '')}
-                    onChange={e => setReviewPhoneInput(e.target.value)}
-                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.9rem' }}
-                  />
-                </div>
-
-                {/* Review / Tasting Comments */}
+                {/* 6. Tasting Comments */}
                 <div style={{ marginBottom: '16px' }}>
                   <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '800', color: '#4A121E', marginBottom: '4px' }}>
                     TASTING NOTES / REVIEW COMMENTS [OPTIONAL]
@@ -6800,7 +6902,7 @@ export default function App() {
                   />
                 </div>
 
-                {/* Submit / Cancel Buttons */}
+                {/* 7. Action Buttons */}
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <button
                     type="submit"
